@@ -144,17 +144,16 @@ export function initHome(container, { api }) {
         <figure class="home-map-figure">
           <div class="home-map">
             <img class="home-map-image" width="700" height="408" alt="">
-            <button type="button" class="home-map-pin" aria-label="알샤티 관측 집계" aria-expanded="false" aria-controls="home-map-popup">
-              알샤티
-            </button>
-            <span class="home-map-popup" id="home-map-popup" hidden></span>
           </div>
           <figcaption>
             <a class="home-map-source" target="_blank" rel="noopener noreferrer">UNOSAT 원본</a>
             <span>위성영상 © <span class="home-map-credit"></span></span>
           </figcaption>
         </figure>
-        <p class="home-map-summary" aria-live="polite"></p>
+        <div class="home-map-controls">
+          <button type="button" class="home-map-detail-button" aria-expanded="false" aria-controls="home-map-result">박현준 관측 결과 보여줘</button>
+          <p class="home-map-result" id="home-map-result" role="status" hidden></p>
+        </div>
       </section>
       <div class="home-details">
         <section class="home-card home-residence" hidden aria-labelledby="home-residence-title">
@@ -199,9 +198,8 @@ export function initHome(container, { api }) {
   const mapImage = container.querySelector('.home-map-image');
   const mapSource = container.querySelector('.home-map-source');
   const mapCredit = container.querySelector('.home-map-credit');
-  const mapPin = container.querySelector('.home-map-pin');
-  const mapPopup = container.querySelector('.home-map-popup');
-  const summary = container.querySelector('.home-map-summary');
+  const mapPin = container.querySelector('.home-map-detail-button');
+  const mapPopup = container.querySelector('.home-map-result');
 
   function selectDate(selected) {
     for (const [index, button] of dateButtons.entries()) {
@@ -213,8 +211,7 @@ export function initHome(container, { api }) {
     mapImage.alt = `${dateLabel(date)} 알샤티와 가자시 주변의 UNOSAT 피해 밀도 지도`;
     mapSource.href = report;
     mapCredit.textContent = imageryCredit;
-    mapPopup.textContent = `${number.format(structures)}개 구조물`;
-    summary.textContent = `${dateLabel(date)} 알샤티에서 영향을 받은 구조물 ${number.format(structures)}개`;
+    mapPopup.textContent = `${dateLabel(date)} 관측 · 알샤티에서 영향을 받은 구조물 ${number.format(structures)}개`;
   }
 
   for (const [index, button] of dateButtons.entries()) {
