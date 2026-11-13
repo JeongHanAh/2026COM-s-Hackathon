@@ -1,3 +1,5 @@
+import { commandLabel } from './easter-egg.js';
+
 // The map excerpts share the same 700 × 408 crop at (40, 760) on page 1 rendered at 210 dpi.
 const observations = [
   {
@@ -151,7 +153,7 @@ export function initHome(container, { api }) {
           </figcaption>
         </figure>
         <div class="home-map-controls">
-          <button type="button" class="home-map-detail-button easter-button" aria-label="관측 결과 보기" aria-expanded="false" aria-controls="home-map-result"><span class="command-label"><span class="command-base">관측 결과 보기</span><span class="command-egg" aria-hidden="true">박현준 관측 결과 보여줘</span></span></button>
+          <button type="button" class="home-map-detail-button easter-button" aria-label="관측 결과 보기" aria-expanded="false" aria-controls="home-map-result">${commandLabel('관측 결과 보기', '박현준 관측 결과 보여줘')}</button>
           <p class="home-map-result" id="home-map-result" role="status" hidden></p>
         </div>
       </section>

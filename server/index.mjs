@@ -439,7 +439,7 @@ export async function createApp({
     await mutate((draft) => {
       const authorId = draft.records[id]?.authorId ?? draft.deletedRecords[id];
       if (authorId && authorId !== user.id) {
-        throw new HttpError(403, '기록을 남긴 가족만 삭제할 수 있어요.', 'RECORD_DELETE_FORBIDDEN');
+        throw new HttpError(403, '기록을 남긴 사람만 삭제할 수 있습니다.', 'RECORD_DELETE_FORBIDDEN');
       }
       draft.deletedRecords[id] = user.id;
       delete draft.records[id];
@@ -563,9 +563,9 @@ export async function createApp({
     if (method === 'POST' && pathname === '/api/family') {
       const body = await readJson(request);
       const name = typeof body.name === 'string' && body.name.trim();
-      if (!name || name.length > 60) throw new HttpError(400, '가족 공간 이름을 1~60자로 입력해 주세요.');
+      if (!name || name.length > 60) throw new HttpError(400, '기록 공간 이름을 1~60자로 입력해 주세요.');
       await mutate((draft) => {
-        if (draft.family) throw new HttpError(409, '이미 가족 공간이 있어요. 초대 코드를 확인해 주세요.');
+        if (draft.family) throw new HttpError(409, '이미 기록 공간이 있습니다. 초대 코드를 확인해 주세요.');
         draft.family = makeFamily(name, user.id);
         draft.home = { ...structuredClone(demoHome), ownerId: user.id, address: '' };
       });
@@ -578,13 +578,13 @@ export async function createApp({
       await mutate((draft) => {
         if (!draft.family || !code || code !== draft.family.inviteCode) throw new HttpError(400, '초대 코드를 확인해 주세요.');
         if (isMember(draft, user.id)) return;
-        if (draft.family.members.length >= 2) throw new HttpError(409, '이 가족 공간에 두 사람이 가입했어요.');
+        if (draft.family.members.length >= 2) throw new HttpError(409, '이 기록 공간에는 이미 두 명이 가입했습니다.');
         draft.family.members.push(user.id);
       });
       return json(response, sessionView(state, user, demo));
     }
 
-    if (!isMember(state, user.id)) throw new HttpError(403, '가족 공간에 먼저 가입해 주세요.', 'FAMILY_REQUIRED');
+    if (!isMember(state, user.id)) throw new HttpError(403, '기록 공간에 먼저 가입해 주세요.', 'FAMILY_REQUIRED');
     if (pathname === '/api/records') {
       if (method === 'GET') return json(response, { records: Object.values(state.records).sort(recordCompare).map((record) => recordView(state, record)) });
       if (method === 'POST') {
@@ -619,7 +619,7 @@ export async function createApp({
         } finally {
           checkRecordStillExists();
         }
-        return sendExport(response, output, `우리의-일상-${record.capturedAt.slice(0, 10)}-${id.slice(0, 8)}.m4a`);
+        return sendExport(response, output, `Still-${record.capturedAt.slice(0, 10)}-${id.slice(0, 8)}.m4a`);
       }
       if (!action && method === 'PATCH' && record.kind === 'audio') {
         const body = await readJson(request);
@@ -652,14 +652,14 @@ export async function createApp({
           throw new HttpError(409, '내보내는 중에 기록이 삭제됐어요. 다시 시도해 주세요.', 'EXPORT_RECORDS_CHANGED');
         }
       }
-      return sendExport(response, output, `우리의-일상-${query.from}-${query.to}.${output.extension}`,
+      return sendExport(response, output, `Still-${query.from}-${query.to}.${output.extension}`,
         query.inline && query.format === 'mp4', request.headers.range);
     }
 
     if (pathname === '/api/home') {
       if (method === 'GET') return json(response, { home: viewHome(state.home, user.id) });
       if (method === 'PUT') {
-        if (state.home.ownerId !== user.id) throw new HttpError(403, '등록한 가족만 주소를 수정할 수 있어요.');
+        if (state.home.ownerId !== user.id) throw new HttpError(403, '주소를 등록한 사람만 수정할 수 있습니다.');
         const body = await readJson(request);
         const address = typeof body.address === 'string' && body.address.trim();
         if (!address || address.length > 200) throw new HttpError(400, '상세 주소를 1~200자로 입력해 주세요.');
@@ -690,5 +690,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   const tls = certPath ? { cert: await readFile(certPath), key: await readFile(keyPath) } : undefined;
   const app = await createApp({ tls });
   const displayHost = host.includes(':') ? `[${host}]` : host;
-  app.listen(port, host, () => console.log(`우리의 일상 기록 · ${tls ? 'https' : 'http'}://${displayHost}:${app.address().port}`));
+  app.listen(port, host, () => console.log(`Still · ${tls ? 'https' : 'http'}://${displayHost}:${app.address().port}`));
 }

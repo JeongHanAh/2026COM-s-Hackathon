@@ -3,6 +3,7 @@ import * as device from './device.js';
 import { readDevice, writeDevice, readOutbox, savePending, readDeletions, queueDeletion, approvePending } from './device.js';
 import { syncRecords } from './record-sync.js';
 import { initHome } from './home.js';
+import { commandLabel } from './easter-egg.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -57,7 +58,7 @@ async function api(path, options = {}) {
     const payload = await response.json().catch(() => ({}));
     const message = typeof payload.error === 'string' && /[가-힣]/.test(payload.error) ? payload.error : {
       400: '입력값을 확인해 주세요.', 401: '다시 로그인해 주세요.', 403: '이 작업을 할 권한이 없습니다.',
-      404: '선택한 기록을 찾을 수 없습니다.', 409: '다른 가족 계정으로 연결되어 있습니다.',
+      404: '선택한 기록을 찾을 수 없습니다.', 409: '다른 계정으로 연결되어 있습니다.',
       422: '파일을 처리할 수 없습니다.', 429: '잠시 뒤 다시 시도해 주세요.', 503: '서버에서 파일을 만들 수 없습니다.'
     }[response.status];
     throw Object.assign(new Error(message || '요청을 처리하지 못했습니다.'), { status: response.status, code: payload.code });
@@ -86,10 +87,9 @@ const records = () => [
 const memberBadge = (member, extra = '') => `<span class="avatar ${member?.id === 'family-b' ? 'avatar-peach' : ''} ${extra}" aria-hidden="true">${escape(member?.name?.slice(0, 1) || '가')}</span>`;
 const title = heading => `<div class="page-intro"><h1>${heading}</h1></div>`;
 const word = count => `${count}개`;
-const commandLabel = (label, egg) => `<span class="command-label"><span class="command-base">${escape(label)}</span><span class="command-egg" aria-hidden="true">${escape(egg)}</span></span>`;
 
 function brand() {
-  return '<a class="brand" href="#timeline"><span>우리의 일상 기록</span></a>';
+  return '<a class="brand" href="#timeline"><span>Still</span></a>';
 }
 
 function signal() {
@@ -97,7 +97,7 @@ function signal() {
 }
 
 function nav() {
-  return `<nav aria-label="가족 공간 메뉴">${Object.keys(labels).map(page => `<a class="nav-link ${page === state.page ? 'active' : ''}" href="#${page}" ${page === state.page ? 'aria-current="page"' : ''}><span>${labels[page]}</span></a>`).join('')}</nav>`;
+  return `<nav aria-label="기록 공간 메뉴">${Object.keys(labels).map(page => `<a class="nav-link ${page === state.page ? 'active' : ''}" href="#${page}" ${page === state.page ? 'aria-current="page"' : ''}><span>${labels[page]}</span></a>`).join('')}</nav>`;
 }
 
 function shell() {
@@ -106,10 +106,10 @@ function shell() {
     <aside class="sidebar">${brand()}
       <button class="family-select" data-action="family"><span class="family-icon">${icon('people', 21)}</span><strong>${escape(family.name)}</strong>${icon('down', 15)}</button>
       ${nav()}
-      <div class="sidebar-bottom"><div class="private-note">${icon('lock', 16)}<span>가족만 공개</span></div>
+      <div class="sidebar-bottom"><div class="private-note">${icon('lock', 16)}<span>멤버만 공개</span></div>
       <button class="sidebar-account" data-action="account" aria-label="${escape(user.name)} 내 계정">${memberBadge(user)}<strong>${escape(user.name)}</strong>${icon('down', 15)}</button></div>
     </aside>
-    <div class="workspace"><header class="topbar"><span class="desktop-current">${icon('lock', 14)} 가족만 공개</span><div class="mobile-brand">${brand()}</div><div class="top-actions"><span id="connection">${signal()}</span><button class="mobile-account icon-button" aria-label="내 계정" data-action="account">${memberBadge(user)}</button></div></header>
+    <div class="workspace"><header class="topbar"><span class="desktop-current">${icon('lock', 14)} 멤버만 공개</span><div class="mobile-brand">${brand()}</div><div class="top-actions"><span id="connection">${signal()}</span><button class="mobile-account icon-button" aria-label="내 계정" data-action="account">${memberBadge(user)}</button></div></header>
     <main id="page" class="page" tabindex="-1"></main></div>
     <div class="mobile-nav">${nav()}</div>
   </div>`;
@@ -144,8 +144,8 @@ function render() {
 
 function login() {
   return `<main class="login-shell">
-    <section class="login-story">${brand()}<div class="login-heading"><h1>생존 기록</h1><p>가족에게 남기는 영상과 음성</p></div><span class="story-label">비공개 가족 기록</span></section>
-    <section class="login-panel"><div class="login-form-wrap"><h2>가족 공간 로그인</h2><form data-form="login" class="stacked">
+    <section class="login-story">${brand()}<div class="login-heading"><h1>Still</h1><p>가까운 사람들과 나누는 일상</p></div><span class="story-label">비공개 기록 공간</span></section>
+    <section class="login-panel"><div class="login-form-wrap"><h2>기록 공간 로그인</h2><form data-form="login" class="stacked">
       <label>이메일<input name="email" type="email" autocomplete="username" required placeholder="이메일 주소"></label>
       <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
       <button class="button primary" type="submit">로그인 ${icon('arrow', 17)}</button>
@@ -157,9 +157,9 @@ function login() {
 }
 
 function onboarding() {
-  return `<main class="onboarding">${brand()}<div class="panel onboarding-panel"><h1>가족 공간에 참여하기</h1><p>${escape(state.session.user.name)}님, 가족 공간을 만들거나 초대 코드를 입력해 주세요.</p>
-  <form class="stacked" data-form="create-family"><label>가족 공간 이름<input name="name" maxlength="48" value="우리 가족" required></label><button class="button primary">가족 공간 만들기</button><p class="form-error" hidden role="alert"></p></form>
-  <form class="stacked" data-form="join"><label>가족에게 받은 초대 코드<input name="code" required autocomplete="off" maxlength="80"></label><button class="button outline">초대 코드로 참여하기</button><p class="form-error" hidden role="alert"></p></form>
+  return `<main class="onboarding">${brand()}<div class="panel onboarding-panel"><h1>기록 공간에 참여하기</h1><p>${escape(state.session.user.name)}님, 기록 공간을 만들거나 초대 코드를 입력해 주세요.</p>
+  <form class="stacked" data-form="create-family"><label>기록 공간 이름<input name="name" maxlength="48" value="우리 공간" required></label><button class="button primary">기록 공간 만들기</button><p class="form-error" hidden role="alert"></p></form>
+  <form class="stacked" data-form="join"><label>함께할 사람에게 받은 초대 코드<input name="code" required autocomplete="off" maxlength="80"></label><button class="button outline">초대 코드로 참여하기</button><p class="form-error" hidden role="alert"></p></form>
   <button class="text-button" data-action="logout">로그아웃</button></div></main>`;
 }
 
@@ -221,7 +221,7 @@ function renderTimeline() {
   const pending = mine().filter(record => record.approved === true).length;
   const deleting = pendingDeletes().length;
   page.innerHTML = `<div class="dashboard">
-    <div class="page-intro diary-intro"><div><p class="record-context">${escape(state.session.family.name)} / 비공개</p><h1>생존 기록</h1></div><div class="diary-tools"><button class="icon-button" data-action="calendar" aria-label="날짜 선택" title="날짜 선택">${icon('timeline', 21)}</button><button class="icon-button" data-action="family" aria-label="가족 정보" title="가족 정보">${icon('people', 21)}</button></div></div>
+    <div class="page-intro diary-intro"><div><p class="record-context">${escape(state.session.family.name)} / 비공개</p><h1>Still</h1></div><div class="diary-tools"><button class="icon-button" data-action="calendar" aria-label="날짜 선택" title="날짜 선택">${icon('timeline', 21)}</button><button class="icon-button" data-action="family" aria-label="공간 멤버" title="공간 멤버">${icon('people', 21)}</button></div></div>
     <div class="dashboard-grid"><div class="diary"><div class="capture-grid">${captureCard('video')}${captureCard('audio')}</div>
     ${!state.connected || pending || deleting ? `<div class="offline-banner" role="status"><div><strong>${[pending ? '업로드 대기 ' + word(pending) : '', deleting ? '삭제 반영 대기 ' + word(deleting) : ''].filter(Boolean).join(' · ') || '오프라인'}</strong><span>${pending || deleting ? '연결되면 반영됩니다.' : '공유를 선택한 기록은 연결 후 업로드됩니다.'}</span></div>${state.connected && (pending || deleting) ? '<button class="text-button" data-action="retry">다시 시도</button>' : ''}</div>` : ''}
     <section class="timeline"><div class="timeline-header"><div><h2>남긴 기록</h2>${state.date ? `<button class="text-button selected-day" data-action="clear-day">${dayLabel(dateAsNoon(state.date))} ${icon('x', 13)}</button>` : ''}</div>
@@ -304,8 +304,8 @@ dialog.addEventListener('cancel', event => { if (savingCapture) event.preventDef
 
 function familyModal() {
   const { family, user } = state.session;
-  modal(escape(family.name), `<p class="dialog-note">초대된 가족만 볼 수 있습니다.</p><div class="member-list dialog-members">${family.members.map(member => `<div>${memberBadge(member)}<span>${escape(member.name)}</span>${member.id === user.id ? '<small>나</small>' : ''}</div>`).join('')}</div>
-  ${family.inviteCode ? `<div class="invite-box"><label for="invite-code">가족 초대 코드</label><div><input id="invite-code" readonly value="${escape(family.inviteCode)}"><button class="button outline" data-action="copy-invite">${icon('copy', 16)} 복사</button></div><small>가족에게 직접 코드를 전해 주세요.</small></div>` : ''}`);
+  modal(escape(family.name), `<p class="dialog-note">초대된 멤버만 볼 수 있습니다.</p><div class="member-list dialog-members">${family.members.map(member => `<div>${memberBadge(member)}<span>${escape(member.name)}</span>${member.id === user.id ? '<small>나</small>' : ''}</div>`).join('')}</div>
+  ${family.inviteCode ? `<div class="invite-box"><label for="invite-code">초대 코드</label><div><input id="invite-code" readonly value="${escape(family.inviteCode)}"><button class="button outline" data-action="copy-invite">${icon('copy', 16)} 복사</button></div><small>함께할 사람에게 코드를 전해 주세요.</small></div>` : ''}`);
 }
 
 function calendarModal() {
@@ -440,7 +440,7 @@ function reviewCapture(record) {
   const url = URL.createObjectURL(record.blob);
   const version = modal(video ? '촬영 확인' : '녹음 확인', `<${video ? 'video' : 'audio'} class="dialog-media" controls playsinline preload="auto" src="${url}"></${video ? 'video' : 'audio'}>
     <p class="dialog-note">${(record.durationMs / 1000).toFixed(1).replace(/\.0$/, '')}초 · 아직 저장하지 않았습니다. 닫으면 버려집니다.</p>
-    <div class="dialog-actions"><button class="button outline" data-action="keep-capture" disabled>기기에 보관</button><button class="button primary" data-action="share-capture" disabled>가족과 공유</button></div>
+    <div class="dialog-actions"><button class="button outline" data-action="keep-capture" disabled>기기에 보관</button><button class="button primary" data-action="share-capture" disabled>공간에 공유</button></div>
     <div class="capture-review-actions"><button class="text-button easter-button" aria-label="${video ? '다시 촬영' : '다시 녹음'}" data-action="retake-capture">${commandLabel(video ? '다시 촬영' : '다시 녹음', `박현준 ${video ? '다시 찍어줘' : '다시 녹음해줘'}`)}</button><button class="text-button discard-button" data-action="discard-capture">버리기</button></div>
     <p class="form-error" role="alert" hidden></p>`, 'capture-review');
   captureDraft = record;
@@ -476,7 +476,7 @@ async function keepCapture(approved) {
     if (dialog.open && modalVersion === version) dialog.close();
     render();
     if (record.partition !== partition()) return;
-    notify(approved ? (state.connected ? '공유를 준비하고 있습니다.' : '연결되면 가족과 공유됩니다.') : '이 기기에 보관했습니다.');
+    notify(approved ? (state.connected ? '공유를 준비하고 있습니다.' : '연결되면 공간에 공유됩니다.') : '이 기기에 보관했습니다.');
     if (approved) sync();
   } catch {
     if (dialog.open && modalVersion === version) {
@@ -515,9 +515,9 @@ function reviewShare(record) {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = URL.createObjectURL(record.blob);
   const tag = record.kind === 'video' ? 'video' : 'audio';
-  modal('가족과 공유할까요?', `<${tag} class="dialog-media" controls playsinline src="${previewUrl}"></${tag}>
+  modal('이 공간에 공유할까요?', `<${tag} class="dialog-media" controls playsinline src="${previewUrl}"></${tag}>
     <p class="dialog-note">아직 이 기기에만 저장되어 있습니다.${state.connected ? '' : ' 공유를 선택하면 연결될 때 업로드됩니다.'}</p>
-    <div class="dialog-actions"><button class="button outline" data-action="close">기기에 보관</button><button class="button primary" data-action="approve-share" data-value="${escape(record.id)}">가족과 공유</button></div><p class="form-error" role="alert" hidden></p>`, 'share-dialog');
+    <div class="dialog-actions"><button class="button outline" data-action="close">기기에 보관</button><button class="button primary" data-action="approve-share" data-value="${escape(record.id)}">공간에 공유</button></div><p class="form-error" role="alert" hidden></p>`, 'share-dialog');
   dialog.dataset.recordId = record.id;
 }
 
@@ -530,7 +530,7 @@ async function shareRecord(id, button) {
     announceLocalChange();
     if (dialog.open && dialog.dataset.recordId === id) dialog.close();
     render();
-    notify(state.connected ? '공유를 준비하고 있습니다.' : '연결되면 가족과 공유됩니다.');
+    notify(state.connected ? '공유를 준비하고 있습니다.' : '연결되면 공간에 공유됩니다.');
     await sync();
   } catch (error) {
     const note = dialog.querySelector('.form-error');
@@ -542,7 +542,7 @@ function confirmDeletion(record) {
   if (!record || record.authorId !== state.session.user.id || deleted(record)) return;
   const localOnly = record.blob && record.approved !== true;
   modal('이 기록을 삭제할까요?', `<p class="dialog-note">${dayLabel(record.capturedAt)} · ${timeLabel(record.capturedAt)} · ${record.kind === 'video' ? '영상' : '음성'}</p>
-    <p class="delete-description">${localOnly ? '이 기기에서 삭제됩니다.' : state.connected ? '가족 공간에서도 삭제됩니다.' : '이 기기에서 먼저 지우고, 연결되면 가족 공간에서도 삭제됩니다.'} 삭제한 기록은 되돌릴 수 없습니다.</p>
+    <p class="delete-description">${localOnly ? '이 기기에서 삭제됩니다.' : state.connected ? '기록 공간에서도 삭제됩니다.' : '이 기기에서 먼저 지우고, 연결되면 기록 공간에서도 삭제됩니다.'} 삭제한 기록은 되돌릴 수 없습니다.</p>
     <div class="dialog-actions"><button class="button outline" data-action="close">취소</button><button class="button danger" data-action="confirm-delete" data-value="${escape(record.id)}">삭제</button></div><p class="form-error" role="alert" hidden></p>`, 'delete-dialog');
   dialog.dataset.recordId = record.id;
 }
@@ -678,7 +678,7 @@ function sync() {
         }
       });
       if (partition() !== key) return;
-      if (result.uploaded) notify(`기록 ${word(result.uploaded)}를 가족과 공유했습니다.`);
+      if (result.uploaded) notify(`기록 ${word(result.uploaded)}를 공간에 공유했습니다.`);
       else if (result.deleted) notify('삭제를 반영했습니다.');
       if (result.uploaded || result.deleted) announceLocalChange();
     } catch (error) {
