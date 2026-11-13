@@ -1,5 +1,3 @@
-import { icon } from './icons.js';
-
 // The map excerpts share the same 700 × 408 crop at (40, 760) on page 1 rendered at 210 dpi.
 const observations = [
   {
@@ -33,7 +31,7 @@ function observationCard({ date, source, structures }, index) {
       <time datetime="${date}">${dateLabel(date)}</time>
       <p>영향을 받은 구조물 <strong>${number.format(structures)}개</strong></p>
     </div>
-    <a href="${source}" target="_blank" rel="noopener noreferrer" aria-label="${dateLabel(date)} UNOSAT 관측 자료">UNOSAT ${icon('corner')}</a>
+    <a href="${source}" target="_blank" rel="noopener noreferrer" aria-label="${dateLabel(date)} UNOSAT 관측 자료">UNOSAT 원문</a>
   </article>`;
 }
 
@@ -71,11 +69,11 @@ function renderResidence(container, home, api) {
   const address = container.querySelector('.home-address-value');
   const edit = container.querySelector('.home-address-edit');
   if (!home.canEdit) {
-    privacy.textContent = '상세 주소는 등록자만 볼 수 있어요.';
+    privacy.textContent = '상세 주소는 등록자만 열람';
     return;
   }
 
-  privacy.textContent = '나만 보는 상세 주소';
+  privacy.textContent = '상세 주소 · 나만 열람';
   address.hidden = !home.hasAddress;
   address.textContent = home.address;
   edit.hidden = false;
@@ -118,10 +116,10 @@ function renderResidence(container, home, api) {
       if (!form.isConnected) return;
       renderResidence(container, saved, api);
       form.hidden = true;
-      message.textContent = '주소를 저장했어요.';
+      message.textContent = '주소를 저장했습니다.';
       edit.focus();
     } catch {
-      message.textContent = '저장에 실패했어요. 연결을 확인하고 다시 시도해 주세요.';
+      message.textContent = '저장하지 못했습니다. 연결을 확인해 주세요.';
     } finally {
       submit.disabled = false;
       cancel.disabled = false;
@@ -132,13 +130,13 @@ function renderResidence(container, home, api) {
 export function initHome(container, { api }) {
   container.innerHTML = `<section class="home-panel" aria-labelledby="home-title">
     <header class="home-intro">
-      <h1 id="home-title">우리 집 주변</h1>
+      <h1 id="home-title">집 주변 관측</h1>
     </header>
     <div class="home-layout">
       <section class="home-card home-neighborhood" aria-labelledby="home-map-title">
         <div class="home-card-heading">
           <h2 id="home-map-title" class="home-area-name">가자시 알샤티</h2>
-          <span class="home-map-legend" aria-label="빨간색이 짙을수록 피해 밀도가 높아요."><span aria-hidden="true"></span>피해 밀도</span>
+          <span class="home-map-legend" aria-label="빨간색이 짙을수록 높은 피해 밀도"><span aria-hidden="true"></span>피해 밀도</span>
         </div>
         <div class="home-date-select" role="group" aria-label="지도 관측일">
           ${observations.map(({ date }, index) => `<button type="button" data-home-date="${index}" aria-pressed="false"><time datetime="${date}">${dateLabel(date)}</time></button>`).join('')}
@@ -147,7 +145,7 @@ export function initHome(container, { api }) {
           <div class="home-map">
             <img class="home-map-image" width="700" height="408" alt="">
             <button type="button" class="home-map-pin" aria-label="알샤티 관측 집계" aria-expanded="false" aria-controls="home-map-popup">
-              ${icon('pin')}
+              알샤티
             </button>
             <span class="home-map-popup" id="home-map-popup" hidden></span>
           </div>
@@ -165,10 +163,10 @@ export function initHome(container, { api }) {
           </div>
           <p class="home-evidence-status"></p>
           <p class="home-building-observation" hidden>
-            관측일 <time></time> · <a target="_blank" rel="noopener noreferrer">출처 보기 ${icon('corner')}</a>
+            관측일 <time></time> · <a target="_blank" rel="noopener noreferrer">출처 보기</a>
           </p>
           <div class="home-address">
-            <p class="home-address-label">${icon('lock')} <span class="home-address-privacy"></span></p>
+            <p class="home-address-label"><span class="home-address-privacy"></span></p>
             <div class="home-address-row">
               <p class="home-address-value" hidden></p>
               <button class="home-address-edit" type="button" hidden>주소 수정</button>
@@ -190,7 +188,7 @@ export function initHome(container, { api }) {
             <h2 id="home-observations-title">관측 기록</h2>
           </div>
           <div class="home-observation-list">${observations.map(observationCard).join('')}</div>
-          <p class="home-note">현장 검증 전 위성 분석으로, 피해 가능성을 포함해요.</p>
+          <p class="home-note">현장 검증 전 위성 분석입니다. 피해 가능성을 포함한 수치입니다.</p>
         </section>
       </div>
     </div>
@@ -237,7 +235,7 @@ export function initHome(container, { api }) {
       renderResidence(container, home, api);
       loadStatus.hidden = true;
     } catch {
-      loadStatus.textContent = '거주지를 불러오지 못했어요. ';
+      loadStatus.textContent = '거주지를 불러오지 못했습니다. ';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = '다시 시도';

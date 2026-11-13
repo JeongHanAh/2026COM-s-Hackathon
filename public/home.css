@@ -1,4 +1,6 @@
 .home-panel {
+  max-width: 900px;
+  margin-inline: auto;
   color: var(--ink);
   line-height: 1.7;
 }
@@ -10,24 +12,30 @@
 
 .home-map-figure { margin: 0; }
 
-.home-intro { margin-bottom: clamp(32px, 4vw, 48px); }
+.home-intro { margin-bottom: clamp(40px, 5vw, 64px); }
+
+.home-intro h1 { letter-spacing: -.045em; }
 
 .home-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: clamp(32px, 4vw, 48px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(48px, 6vw, 72px);
   align-items: start;
 }
 
 .home-details {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-width: 0;
-  gap: clamp(32px, 4vw, 48px);
+  gap: 0 clamp(40px, 5vw, 64px);
 }
+
+.home-load-status { grid-column: 1 / -1; }
+.home-load-status:empty { display: none; }
 
 .home-card {
   min-width: 0;
-  padding-top: 20px;
+  padding-top: 24px;
   border-top: 1px solid var(--line);
 }
 
@@ -37,32 +45,35 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px 20px;
-  margin-bottom: 20px;
+  margin-bottom: 28px;
 }
 
 .home-card-heading h2 {
-  font-size: 1.12rem;
+  font-size: 1.05rem;
   line-height: 1.45;
   letter-spacing: -.035em;
 }
 
+.home-neighborhood .home-card-heading h2 { font-size: 1.4rem; }
+
 .home-date-select {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-bottom: 18px;
+  gap: 12px 32px;
+  margin-bottom: 28px;
 }
 
 .home-date-select button {
-  min-height: 46px;
-  padding: 8px 6px;
+  min-height: 52px;
+  padding: 10px 0;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: .9rem;
-  font-weight: 650;
+  font-size: 1.08rem;
+  font-weight: 500;
+  font-family: Consolas, "Malgun Gothic", monospace;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
@@ -77,7 +88,7 @@
 .home-date-select button[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--ink);
-  font-weight: 740;
+  font-weight: 700;
 }
 
 .home-map {
@@ -86,7 +97,7 @@
   min-height: 140px;
   aspect-ratio: 12 / 7;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 2px;
   overflow: hidden;
   background: var(--accent-soft);
 }
@@ -111,38 +122,30 @@
   top: 26%;
   display: grid;
   place-items: center;
-  width: 44px;
+  min-width: 68px;
   height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: var(--accent);
-  background: transparent;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--parchment);
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
   cursor: pointer;
-}
-
-.home-map-pin svg {
-  box-sizing: content-box;
-  width: 17px;
-  height: 17px;
-  padding: 5px;
-  border: 1px solid var(--surface);
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 2px 6px #22223b4f;
 }
 
 .home-map-pin:focus-visible { background: var(--surface); }
 
 .home-map-popup {
-  top: 26%;
-  left: calc(25% + 20px);
-  transform: translateY(-50%);
-  padding: 7px 10px;
-  border-radius: 6px;
+  top: calc(26% + 28px);
+  left: 25%;
+  transform: translateX(-50%);
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 2px 10px #22223b2a;
   font-size: .82rem;
   font-weight: 650;
   pointer-events: none;
@@ -154,7 +157,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px 16px;
-  margin-top: 14px;
+  margin-top: 20px;
   color: var(--muted);
   font-size: .82rem;
 }
@@ -194,12 +197,13 @@
 }
 
 .home-evidence-status {
-  padding: 14px 16px;
-  border-left: 2px solid var(--almond-silk);
+  margin: 0;
+  padding: 0;
   color: var(--ink);
-  background: var(--accent-soft);
-  font-size: .95rem;
-  font-weight: 730;
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.75;
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
@@ -209,7 +213,7 @@
   font-size: .88rem;
 }
 
-.home-address { margin-top: 22px; }
+.home-address { margin-top: 36px; }
 
 .home-address-label {
   display: flex;
@@ -217,12 +221,6 @@
   gap: 8px;
   color: var(--muted);
   font-size: .85rem;
-}
-
-.home-address-label svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
 }
 
 .home-address-row {
@@ -245,7 +243,7 @@
   min-height: 44px;
   padding: 5px 9px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 2px;
   background: transparent;
   color: var(--accent);
   font: inherit;
@@ -269,10 +267,10 @@
 .home-address-form input {
   width: 100%;
   box-sizing: border-box;
-  min-height: 44px;
-  padding: 7px 9px;
+  min-height: 50px;
+  padding: 10px 12px;
   border: 1px solid var(--muted);
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
@@ -303,22 +301,23 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  padding: 22px 0;
+  padding: 26px 0;
   border-bottom: 1px solid var(--line);
 }
 
 .home-observation:first-child { padding-top: 0; }
 
-.home-observation-selected time { text-decoration: underline; text-underline-offset: 4px; }
+.home-observation-selected time { text-decoration: underline; text-underline-offset: 6px; }
 
 .home-observation time {
-  font-size: .95rem;
-  font-weight: 740;
+  font-size: 1.08rem;
+  font-weight: 650;
+  font-family: Consolas, "Malgun Gothic", monospace;
   font-variant-numeric: tabular-nums;
 }
 
 .home-observation p {
-  margin-top: 4px;
+  margin-top: 10px;
   color: var(--muted);
   font-size: .9rem;
 }
@@ -336,18 +335,15 @@
   white-space: nowrap;
 }
 
-.home-observation a svg,
-.home-building-observation svg {
-  width: 14px;
-  height: 14px;
-}
-
 .home-note {
-  margin-top: 20px;
+  margin-top: 28px;
   color: var(--muted);
   font-size: .85rem;
 }
 
-@media (max-width: 980px) {
-  .home-layout { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 700px) {
+  .home-details { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .home-date-select { gap: 10px 24px; }
+  .home-date-select button { font-size: .96rem; }
+  .home-evidence-status { max-width: 30ch; }
 }

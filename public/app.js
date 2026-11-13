@@ -12,10 +12,10 @@ const formatter = options => new Intl.DateTimeFormat('ko-KR', { timeZone: zone, 
 const dateKeyFormat = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
 const dateKey = value => dateKeyFormat.format(new Date(value));
 const dayLabel = value => formatter({ month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(value));
-const timeLabel = value => formatter({ hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+const timeLabel = value => formatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
 const startOfMonth = date => date.slice(0, 7) + '-01';
 const dateAsNoon = date => new Date(date + 'T12:00:00+09:00');
-const labels = { timeline: '일상 기록', archive: '내보내기', home: '우리 집 주변' };
+const labels = { timeline: '기록', archive: '내보내기', home: '집 주변' };
 const demoUsers = { a: { name: '서연', email: 'family-a@example.test' }, b: { name: '지우', email: 'family-b@example.test' } };
 const state = {
   session: null, records: [], outbox: [], deletions: [], connected: navigator.onLine,
@@ -35,7 +35,6 @@ let captureDraft;
 let captureDraftUrl;
 let capturePreviewTimer;
 let savingCapture = false;
-const localMediaUrls = new Map();
 const durationLabel = milliseconds => {
   const seconds = Math.max(1, Math.round(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -88,7 +87,7 @@ const title = heading => `<div class="page-intro"><h1>${heading}</h1></div>`;
 const word = count => `${count}개`;
 
 function brand() {
-  return '<a class="brand" href="#timeline"><img src="/icon.svg" alt="" width="38" height="38"><span>우리의 일상 기록</span></a>';
+  return '<a class="brand" href="#timeline"><span>우리의 일상 기록</span></a>';
 }
 
 function signal() {
@@ -96,7 +95,7 @@ function signal() {
 }
 
 function nav() {
-  return `<nav aria-label="가족 공간 메뉴">${Object.keys(labels).map(page => `<a class="nav-link ${page === state.page ? 'active' : ''}" href="#${page}" ${page === state.page ? 'aria-current="page"' : ''}>${icon(page, 20)}<span>${labels[page]}</span></a>`).join('')}</nav>`;
+  return `<nav aria-label="가족 공간 메뉴">${Object.keys(labels).map(page => `<a class="nav-link ${page === state.page ? 'active' : ''}" href="#${page}" ${page === state.page ? 'aria-current="page"' : ''}><span>${labels[page]}</span></a>`).join('')}</nav>`;
 }
 
 function shell() {
@@ -115,10 +114,6 @@ function shell() {
 }
 
 function render() {
-  const localIds = new Set(mine().map(record => record.id));
-  for (const [id, url] of localMediaUrls) {
-    if (!localIds.has(id)) { URL.revokeObjectURL(url); localMediaUrls.delete(id); }
-  }
   app.className = '';
   const user = state.session?.user;
   const family = state.session?.family;
@@ -140,14 +135,14 @@ function render() {
 
 function login() {
   return `<main class="login-shell">
-    <section class="login-story">${brand()}<div class="login-heading"><h1>우리의<br>일상 기록.</h1><p>3초 영상. 최대 10초 음성.</p></div><span class="story-label">${icon('lock', 17)} 가족만 공개</span></section>
+    <section class="login-story">${brand()}<div class="login-heading"><h1>생존 기록</h1><p>가족에게 남기는 영상과 음성</p></div><span class="story-label">비공개 가족 기록</span></section>
     <section class="login-panel"><div class="login-form-wrap"><h2>가족 공간 로그인</h2><form data-form="login" class="stacked">
       <label>이메일<input name="email" type="email" autocomplete="username" required placeholder="이메일 주소"></label>
       <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
       <button class="button primary" type="submit">로그인 ${icon('arrow', 17)}</button>
       <p class="form-error" hidden role="alert"></p></form>
       ${state.session?.demo ? `<div class="demo-users"><p>해커톤 시연 계정</p><div><button class="button outline" data-action="demo" data-value="a">서연으로 들어가기</button><button class="button outline" data-action="demo" data-value="b">지우로 들어가기</button></div></div>` : ''}
-      ${state.connected ? '' : '<p class="muted">처음 로그인하려면 인터넷 연결이 필요해요.</p>'}
+      ${state.connected ? '' : '<p class="muted">첫 로그인에는 인터넷 연결이 필요합니다.</p>'}
     </div></section>
   </main>`;
 }
@@ -162,7 +157,7 @@ function onboarding() {
 function captureCard(kind) {
   const video = kind === 'video';
   return `<button class="capture-card ${video ? 'capture-video' : 'capture-audio'}" data-action="capture" data-value="${kind}" aria-label="${video ? '3초 영상 남기기' : '최대 10초 음성 남기기'}">
-    <span class="capture-icon">${icon(video ? 'video' : 'mic', 20)}</span><span class="capture-label">${video ? '영상' : '음성'}</span><span class="capture-duration">${video ? '3초' : '최대 10초'}</span>
+    <span class="capture-label">${video ? '영상 남기기' : '음성 남기기'}</span><span class="capture-duration">${video ? '3초' : '최대 10초'}</span>
   </button>`;
 }
 
@@ -190,13 +185,11 @@ function recordCard(record) {
   const stateBadge = pending ? `<span class="pending-badge">${draft ? '기기에만 저장' : '업로드 대기'}</span>` : '';
   const deleteButton = record.authorId === state.session.user.id ? `<button class="icon-button record-delete" data-action="delete" data-value="${escape(record.id)}" aria-label="${escape(record.authorName)} ${dayLabel(record.capturedAt)} ${timeLabel(record.capturedAt)} ${audio ? '음성' : '영상'} 삭제">${icon('trash', 17)}</button>` : '';
   const seconds = durationLabel(record.durationMs || (audio ? 10000 : 3000));
-  if (!audio && pending && !localMediaUrls.has(record.id)) localMediaUrls.set(record.id, URL.createObjectURL(record.blob));
-  const videoUrl = pending ? localMediaUrls.get(record.id) : record.mediaUrl;
   return `<article class="record-card ${audio ? 'audio-record' : 'video-record'}">
-    <header class="record-meta">${memberBadge({ id: record.authorId, name: record.authorName })}<div><strong>${escape(record.authorName)}</strong><span>${timeLabel(record.capturedAt)}</span></div>${stateBadge}${deleteButton}</header>
+    <header class="record-meta"><time datetime="${escape(record.capturedAt)}">${timeLabel(record.capturedAt)}</time><strong>${escape(record.authorName)}</strong>${stateBadge}${deleteButton}</header>
     ${audio ? `<button class="audio-player" ${action} aria-label="${escape(record.authorName)} 음성 재생"><span class="audio-play">${icon('play', 20)}</span><span class="audio-caption">음성 듣기</span><span class="duration">${seconds}</span></button>
-      ${!pending ? `<div class="record-footer"><details class="transcript"><summary>${record.transcript ? '텍스트 보기' : record.transcriptStatus === 'processing' ? '음성 인식 중' : '[인식 실패]'}${icon('down', 14)}</summary><p>${record.transcript ? escape(record.transcript) : record.transcriptStatus === 'processing' ? '음성을 글로 옮기고 있어요.' : '녹음을 듣고 텍스트를 입력할 수 있어요.'}</p><button class="text-button" data-action="edit" data-value="${escape(record.id)}" aria-label="음성 텍스트 수정">${icon('edit', 15)} 수정</button></details><a class="icon-button" href="/api/records/${encodeURIComponent(record.id)}/audio" download aria-label="개별 M4A 내려받기">${icon('archive', 16)}</a></div>` : ''}
-      ` : `<button class="video-preview" ${action} aria-label="${escape(record.authorName)} 영상 재생">${videoUrl ? `<video src="${escape(videoUrl)}#t=0.1" preload="metadata" muted playsinline aria-hidden="true"></video>` : ''}<span class="video-play">${icon('play', 25)}</span><span class="video-time">${seconds}</span></button>`}
+      ${!pending ? `<div class="record-footer"><details class="transcript"><summary>${record.transcript ? '텍스트 보기' : record.transcriptStatus === 'processing' ? '음성 인식 중' : '[인식 실패]'}${icon('down', 14)}</summary><p>${record.transcript ? escape(record.transcript) : record.transcriptStatus === 'processing' ? '음성을 글로 옮기는 중입니다.' : '녹음을 듣고 직접 입력할 수 있습니다.'}</p><button class="text-button" data-action="edit" data-value="${escape(record.id)}" aria-label="음성 텍스트 수정">${icon('edit', 15)} 수정</button></details><a class="icon-button" href="/api/records/${encodeURIComponent(record.id)}/audio" download aria-label="개별 M4A 내려받기">${icon('archive', 16)}</a></div>` : ''}
+      ` : `<button class="video-preview" ${action} aria-label="${escape(record.authorName)} 영상 재생"><span class="video-play">${icon('play', 20)}</span><span class="media-label">영상 보기</span><span class="video-time">${seconds}</span></button>`}
     ${draft ? `<div class="local-actions"><button class="text-button" data-action="review-share" data-value="${escape(record.id)}">확인하고 공유하기 ${icon('arrow', 15)}</button></div>` : ''}
   </article>`;
 }
@@ -214,12 +207,12 @@ function renderTimeline() {
   const pending = mine().filter(record => record.approved === true).length;
   const deleting = pendingDeletes().length;
   page.innerHTML = `<div class="dashboard">
-    <div class="page-intro diary-intro"><h1>일상 기록</h1><div class="diary-tools"><button class="icon-button" data-action="calendar" aria-label="날짜 선택" title="날짜 선택">${icon('timeline', 21)}</button><button class="icon-button" data-action="family" aria-label="가족 정보" title="가족 정보">${icon('people', 21)}</button></div></div>
+    <div class="page-intro diary-intro"><div><p class="record-context">${escape(state.session.family.name)} / 비공개</p><h1>생존 기록</h1></div><div class="diary-tools"><button class="icon-button" data-action="calendar" aria-label="날짜 선택" title="날짜 선택">${icon('timeline', 21)}</button><button class="icon-button" data-action="family" aria-label="가족 정보" title="가족 정보">${icon('people', 21)}</button></div></div>
     <div class="dashboard-grid"><div class="diary"><div class="capture-grid">${captureCard('video')}${captureCard('audio')}</div>
-    ${!state.connected || pending || deleting ? `<div class="offline-banner" role="status">${icon('cloud', 18)}<div><strong>${[pending ? '업로드 대기 ' + word(pending) : '', deleting ? '삭제 반영 대기 ' + word(deleting) : ''].filter(Boolean).join(' · ') || '오프라인'}</strong><span>${pending || deleting ? '연결되면 반영됩니다.' : '공유 전까지 이 기기에 보관합니다.'}</span></div>${state.connected && (pending || deleting) ? '<button class="text-button" data-action="retry">다시 시도</button>' : ''}</div>` : ''}
-    <section class="timeline"><div class="timeline-header"><div><h2>가족의 기록</h2>${state.date ? `<button class="text-button selected-day" data-action="clear-day">${dayLabel(dateAsNoon(state.date))} ${icon('x', 13)}</button>` : ''}</div>
+    ${!state.connected || pending || deleting ? `<div class="offline-banner" role="status"><div><strong>${[pending ? '업로드 대기 ' + word(pending) : '', deleting ? '삭제 반영 대기 ' + word(deleting) : ''].filter(Boolean).join(' · ') || '오프라인'}</strong><span>${pending || deleting ? '연결되면 반영됩니다.' : '공유를 선택한 기록은 연결 후 업로드됩니다.'}</span></div>${state.connected && (pending || deleting) ? '<button class="text-button" data-action="retry">다시 시도</button>' : ''}</div>` : ''}
+    <section class="timeline"><div class="timeline-header"><div><h2>남긴 기록</h2>${state.date ? `<button class="text-button selected-day" data-action="clear-day">${dayLabel(dateAsNoon(state.date))} ${icon('x', 13)}</button>` : ''}</div>
     <div class="filter" aria-label="기록 종류">${Object.entries({ all: '전체', video: '영상', audio: '음성' }).map(([key, value]) => `<button data-action="filter" data-value="${key}" aria-pressed="${key === state.filter}">${value}</button>`).join('')}</div></div>
-    ${groups.size ? [...groups].reverse().map(([date, entries]) => `<div class="timeline-day"><h3><span class="day-dot"></span>${dayLabel(dateAsNoon(date))}${date === dateKey(Date.now()) ? ' <span class="today-chip">오늘</span>' : ''}</h3><div class="day-records">${entries.map(recordCard).join('')}</div></div>`).join('') : '<div class="panel empty"><div class="empty-icon">' + icon('timeline', 24) + '</div><h3>아직 이곳에 기록이 없어요</h3><p>위의 영상이나 음성으로 새 기록을 남겨 보세요.</p></div>'}</section></div>
+    ${groups.size ? [...groups].reverse().map(([date, entries]) => `<div class="timeline-day"><h3><time datetime="${date}">${date.replaceAll('-', '.')}</time><span class="day-week">${formatter({ weekday: 'long' }).format(dateAsNoon(date))}</span></h3><div class="day-records">${entries.map(recordCard).join('')}</div></div>`).join('') : '<div class="panel empty"><h3>아직 기록이 없습니다</h3><p>영상이나 음성으로 안부를 남깁니다.</p></div>'}</section></div>
     </div></div>`;
 }
 
@@ -296,7 +289,7 @@ dialog.addEventListener('cancel', event => { if (savingCapture) event.preventDef
 
 function familyModal() {
   const { family, user } = state.session;
-  modal(escape(family.name), `<p class="dialog-note">${icon('lock', 17)} 초대된 가족만 기록을 볼 수 있어요.</p><div class="member-list dialog-members">${family.members.map(member => `<div>${memberBadge(member)}<span>${escape(member.name)}</span>${member.id === user.id ? '<small>나</small>' : ''}</div>`).join('')}</div>
+  modal(escape(family.name), `<p class="dialog-note">초대된 가족만 볼 수 있습니다.</p><div class="member-list dialog-members">${family.members.map(member => `<div>${memberBadge(member)}<span>${escape(member.name)}</span>${member.id === user.id ? '<small>나</small>' : ''}</div>`).join('')}</div>
   ${family.inviteCode ? `<div class="invite-box"><label for="invite-code">가족 초대 코드</label><div><input id="invite-code" readonly value="${escape(family.inviteCode)}"><button class="button outline" data-action="copy-invite">${icon('copy', 16)} 복사</button></div><small>가족에게 직접 코드를 전해 주세요.</small></div>` : ''}`);
 }
 
