@@ -1,6 +1,6 @@
 // PostgreSQL RLS/RPC verification. Auth and Storage schemas are fixtures only;
 // the real migration and PostgreSQL privilege checks execute unchanged.
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 export async function createPolicyDatabase() {
@@ -22,8 +22,10 @@ export async function createPolicyDatabase() {
     grant execute on function auth.uid() to anon,authenticated;
     grant select,insert,delete,update on storage.objects to authenticated;
   `);
-  const sql = await readFile(new URL('../migrations/202611140001_still.sql', import.meta.url), 'utf8');
-  await db.exec(sql);
+  const migrations = new URL('../migrations/', import.meta.url);
+  for (const name of (await readdir(migrations)).filter(name => /^\d+_.*\.sql$/.test(name)).sort()) {
+    await db.exec(await readFile(new URL(name, migrations), 'utf8'));
+  }
   const asUser = async (id, run, role = 'authenticated') => {
     await db.exec(`set role ${role}`);
     await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id || '']);
