@@ -100,19 +100,22 @@ h1 { font-size: clamp(36px, 3.5vw, 48px); font-weight: 700; line-height: 1.3; le
 .diary-tools .icon-button { width: 44px; height: 44px; }
 .diary, .dashboard-aside { min-width: 0; }
 .dashboard-aside { display: grid; gap: 24px; }
-.capture-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.capture-grid { display: grid; grid-template-columns: repeat(2, 96px); gap: 12px; }
 .capture-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
   align-items: center;
-  gap: 24px;
+  justify-items: center;
+  gap: 0;
   min-width: 0;
-  min-height: 76px;
-  padding: 18px 24px;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: transparent;
-  text-align: left;
+  text-align: center;
 }
 .capture-card:hover { background: var(--accent-soft); }
 .capture-video { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
@@ -120,10 +123,9 @@ h1 { font-size: clamp(36px, 3.5vw, 48px); font-weight: 700; line-height: 1.3; le
 .capture-audio { background: var(--surface); }
 .capture-icon { display: inline-flex; flex: none; }
 .capture-icon svg { width: 17px; height: 17px; }
-.capture-label { font-weight: 700; font-size: 18px; letter-spacing: -.035em; }
-.capture-duration { display: inline-flex; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.capture-video .capture-duration { color: var(--accent-ink); }
-.capture-audio .capture-duration { color: var(--muted); }
+.capture-label { min-width: 0; font-weight: 700; font-size: 14px; letter-spacing: -.035em; }
+.capture-label .command-label { max-width: 100%; white-space: normal; word-break: keep-all; line-height: 1.5; }
+.capture-label .command-egg { font-size: 12px; }
 
 .side-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .side-title h2, .range-panel h2 { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 730; }
@@ -165,6 +167,13 @@ h1 { font-size: clamp(36px, 3.5vw, 48px); font-weight: 700; line-height: 1.3; le
 .icon-button { width: 40px; height: 40px; flex: none; padding: 0; border-radius: 2px; color: var(--muted); }
 .text-button { color: var(--accent); font-size: 12px; padding: 4px; min-height: 36px; }
 .text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.command-label { display: inline-grid; min-width: 0; text-align: inherit; }
+.command-base, .command-egg { grid-area: 1 / 1; }
+.command-egg { visibility: hidden; }
+@media (hover: hover) and (pointer: fine) {
+  .easter-button:not(:disabled):hover .command-base { visibility: hidden; }
+  .easter-button:not(:disabled):hover .command-egg { visibility: visible; }
+}
 .offline-banner { display: flex; gap: 8px; align-items: center; margin-top: 24px; padding: 14px 16px; border-left: 2px solid var(--warning); background: var(--surface); color: var(--muted); font-size: 13px; }
 .offline-banner strong, .offline-banner span { display: block; }
 .offline-banner span { margin-top: 3px; font-size: 12px; }
@@ -319,15 +328,12 @@ dialog::backdrop { background: #080b08c9; }
 
 @media (max-width: 650px) {
   .page-intro { margin-bottom: 36px; }
-  .capture-grid { max-width: none; }
   .timeline { margin-top: 48px; }
   .timeline-header { margin-bottom: 24px; gap: 8px; }
   .timeline-header h2 { font-size: 13px; }
   .day-records { gap: 36px; }
-  .capture-card { padding-inline: 18px; gap: 16px; }
   .audio-player { padding-inline: 18px; }
   .video-preview { aspect-ratio: 4 / 3; }
-  .capture-label { font-size: 16px; }
   .filter { gap: 2px; }
   .filter button { min-height: 44px; min-width: 42px; }
   .record-meta .record-delete, .record-footer .icon-button { width: 44px; height: 44px; }
@@ -354,8 +360,6 @@ dialog::backdrop { background: #080b08c9; }
   .topbar { padding-inline: 16px; }
   .top-actions { gap: 2px; }
   .signal { font-size: 11px; }
-  .capture-card { padding-inline: 14px; gap: 8px; }
-  .capture-label { font-size: 14px; }
   .diary-tools { gap: 0; }
   .diary-intro { gap: 8px; }
   .timeline-header { flex-wrap: wrap; row-gap: 12px; }

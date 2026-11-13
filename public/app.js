@@ -86,6 +86,7 @@ const records = () => [
 const memberBadge = (member, extra = '') => `<span class="avatar ${member?.id === 'family-b' ? 'avatar-peach' : ''} ${extra}" aria-hidden="true">${escape(member?.name?.slice(0, 1) || '가')}</span>`;
 const title = heading => `<div class="page-intro"><h1>${heading}</h1></div>`;
 const word = count => `${count}개`;
+const commandLabel = (label, egg) => `<span class="command-label"><span class="command-base">${escape(label)}</span><span class="command-egg" aria-hidden="true">${escape(egg)}</span></span>`;
 
 function brand() {
   return '<a class="brand" href="#timeline"><span>우리의 일상 기록</span></a>';
@@ -164,8 +165,8 @@ function onboarding() {
 
 function captureCard(kind) {
   const video = kind === 'video';
-  return `<button class="capture-card ${video ? 'capture-video' : 'capture-audio'}" data-action="capture" data-value="${kind}" aria-label="박현준 ${video ? '영상 남겨줘, 3초' : '음성 남겨줘, 최대 10초'}">
-    <span class="capture-label">박현준 ${video ? '영상' : '음성'} 남겨줘</span><span class="capture-duration">${video ? '3초' : '최대 10초'}</span>
+  return `<button class="capture-card easter-button ${video ? 'capture-video' : 'capture-audio'}" data-action="capture" data-value="${kind}" aria-label="${video ? '영상 기록' : '음성 기록'}">
+    <span class="capture-label">${commandLabel(video ? '영상 기록' : '음성 기록', `박현준 ${video ? '영상' : '음성'} 남겨줘`)}</span>
   </button>`;
 }
 
@@ -250,8 +251,8 @@ function archiveControls() {
   const commands = { mp4: '박현준 영상 묶어줘', m4a: '박현준 음성 묶어줘', txt: '박현준 글로 정리해줘', zip: '박현준 전부 담아줘' };
   const summary = `<div class="export-counts"><div><span>포함할 기록</span><strong>${word(available.length)}</strong><small>영상 ${word(video)} · 음성 ${word(audio)}</small></div><div><span>업로드 대기</span><strong>${word(pending.length)}</strong><small>이 기기 · 업로드 후 포함</small></div></div>`;
   return `${!state.connected ? '<p class="offline-banner">파일을 만들려면 인터넷 연결이 필요해요.</p>' : ''}${summary}${drafts ? `<p class="dialog-note">기기에만 저장된 ${word(drafts)}는 공유 후 포함됩니다.</p>` : ''}${familyDeletes().length ? '<p class="dialog-note">삭제 반영 후 내보낼 수 있습니다.</p>' : ''}<div class="export-grid">${types.map(([format, glyph, label, enabled]) => `<article class="panel export-card"><div class="export-icon">${icon(glyph, 23)}</div><div class="export-title"><h2>${label}</h2><span>.${format}</span></div><div class="export-actions">
-    ${format === 'mp4' ? `<button class="button outline" data-action="preview" ${!enabled || !state.connected ? 'disabled' : ''}>${icon('play', 17)} 박현준 먼저 보여줘</button>` : ''}
-    <button class="button outline" data-action="download" data-value="${format}" ${!enabled || !state.connected ? 'disabled' : ''}>${icon('archive', 17)} ${commands[format]}</button></div></article>`).join('')}</div>`;
+    ${format === 'mp4' ? `<button class="button outline easter-button" aria-label="미리보기" data-action="preview" ${!enabled || !state.connected ? 'disabled' : ''}>${icon('play', 17)} ${commandLabel('미리보기', '박현준 먼저 보여줘')}</button>` : ''}
+    <button class="button outline easter-button" aria-label="${label} 내려받기" data-action="download" data-value="${format}" ${!enabled || !state.connected ? 'disabled' : ''}>${icon('archive', 17)} ${commandLabel('내려받기', commands[format])}</button></div></article>`).join('')}</div>`;
 }
 
 function renderArchive() {
@@ -321,7 +322,7 @@ function openCapture(kind) {
   const video = kind === 'video';
   const total = video ? 3 : 10;
   const owner = state.session;
-  const captureVersion = modal(video ? '3초 영상' : '음성 녹음', `<div class="capture-stage ${video ? 'camera-stage' : 'microphone-stage'}"><video id="live" muted playsinline hidden></video><span class="live-glyph">${icon(video ? 'video' : 'mic', 44)}</span><span class="record-counter" role="status">${video ? '3초' : '0:00 / 0:10'}</span></div><p class="dialog-note capture-hint">${video ? '3초 뒤 자동으로 끝납니다.' : '최대 10초. 언제든 녹음을 끝낼 수 있습니다.'} 확인한 뒤 보관하거나 버리세요.</p><button class="button primary full" id="record-start">${icon(video ? 'video' : 'mic', 19)} 박현준 ${video ? '촬영' : '녹음'} 시작해줘</button><button class="button primary full" id="record-stop" hidden>${icon('stop', 17)} 박현준 녹음 끝내줘</button>`, 'capture-dialog');
+  const captureVersion = modal(video ? '영상 기록' : '음성 기록', `<div class="capture-stage ${video ? 'camera-stage' : 'microphone-stage'}"><video id="live" muted playsinline hidden></video><span class="live-glyph">${icon(video ? 'video' : 'mic', 44)}</span><span class="record-counter" role="status">${video ? '촬영 준비' : '0:00'}</span></div><p class="dialog-note capture-hint">기록 후 재생해 보고 보관하거나 버리세요.</p><button class="button primary full easter-button" id="record-start" aria-label="${video ? '촬영 시작' : '녹음 시작'}">${icon(video ? 'video' : 'mic', 19)} ${commandLabel(video ? '촬영 시작' : '녹음 시작', `박현준 ${video ? '촬영' : '녹음'} 시작해줘`)}</button><button class="button primary full easter-button" id="record-stop" aria-label="녹음 끝내기" hidden>${icon('stop', 17)} ${commandLabel('녹음 끝내기', '박현준 녹음 끝내줘')}</button>`, 'capture-dialog');
   const start = dialog.querySelector('#record-start');
   const stop = dialog.querySelector('#record-stop');
   start.addEventListener('click', async () => {
@@ -355,7 +356,7 @@ function openCapture(kind) {
       if (cancelled || !dialog.open || modalVersion !== captureVersion) return;
       hint.textContent = message;
       stage.classList.remove('recording');
-      start.textContent = video ? '박현준 촬영 시작해줘' : '박현준 녹음 시작해줘';
+      start.innerHTML = commandLabel(video ? '촬영 시작' : '녹음 시작', `박현준 ${video ? '촬영' : '녹음'} 시작해줘`);
       start.hidden = false;
       start.disabled = false;
       stop.hidden = true;
@@ -423,7 +424,7 @@ function openCapture(kind) {
       if (!video) { start.hidden = true; stop.hidden = false; stop.disabled = false; stop.onclick = finish; }
       interval = setInterval(() => {
         const elapsed = performance.now() - startedAt;
-        counter.textContent = video ? Math.max(1, Math.ceil((total * 1000 - elapsed) / 1000)) + '초' : `0:${String(Math.min(10, Math.floor(elapsed / 1000))).padStart(2, '0')} / 0:10`;
+        counter.textContent = video ? Math.max(1, Math.ceil((total * 1000 - elapsed) / 1000)) + '초' : `0:${String(Math.min(10, Math.floor(elapsed / 1000))).padStart(2, '0')}`;
       }, 120);
       timeout = setTimeout(finish, total * 1000);
     } catch {
@@ -439,7 +440,7 @@ function reviewCapture(record) {
   const version = modal(video ? '촬영 확인' : '녹음 확인', `<${video ? 'video' : 'audio'} class="dialog-media" controls playsinline preload="auto" src="${url}"></${video ? 'video' : 'audio'}>
     <p class="dialog-note">${(record.durationMs / 1000).toFixed(1).replace(/\.0$/, '')}초 · 아직 저장하지 않았습니다. 닫으면 버려집니다.</p>
     <div class="dialog-actions"><button class="button outline" data-action="keep-capture" disabled>기기에 보관</button><button class="button primary" data-action="share-capture" disabled>가족과 공유</button></div>
-    <div class="capture-review-actions"><button class="text-button" data-action="retake-capture">박현준 ${video ? '다시 찍어줘' : '다시 녹음해줘'}</button><button class="text-button discard-button" data-action="discard-capture">버리기</button></div>
+    <div class="capture-review-actions"><button class="text-button easter-button" aria-label="${video ? '다시 촬영' : '다시 녹음'}" data-action="retake-capture">${commandLabel(video ? '다시 촬영' : '다시 녹음', `박현준 ${video ? '다시 찍어줘' : '다시 녹음해줘'}`)}</button><button class="text-button discard-button" data-action="discard-capture">버리기</button></div>
     <p class="form-error" role="alert" hidden></p>`, 'capture-review');
   captureDraft = record;
   captureDraftUrl = url;
