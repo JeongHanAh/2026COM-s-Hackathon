@@ -1,0 +1,19 @@
+[
+  {
+    "authorId": "family-a",
+    "kind": "video",
+    "file": "window.mp4",
+    "mimeType": "video/mp4",
+    "hoursAgo": 1.5,
+    "durationMs": 3000
+  },
+  {
+    "authorId": "family-b",
+    "kind": "audio",
+    "file": "voice.m4a",
+    "mimeType": "audio/mp4",
+    "hoursAgo": 1,
+    "durationMs": 10000,
+    "transcript": "오늘은 차를 끓여 마셨어요. 가족 모두 보고 싶어요. 우리 곧 다시 만나요."
+  }
+]

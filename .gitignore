@@ -1,0 +1,31 @@
+# Local family records, account data and QA recordings
+/data/
+/data-*/
+/.qa/
+/.qa*/
+/test-data/
+/test-output/
+
+# Downloaded executables and speech models
+/.tools/
+/node_modules/
+
+# Local configuration, passwords and certificates
+.env
+.env.*
+!.env.example
+/certs/
+/certificates/
+/secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+*.der
+
+# Local logs and OS metadata
+*.log
+.DS_Store
+Thumbs.db

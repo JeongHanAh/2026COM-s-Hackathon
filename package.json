@@ -1,0 +1,11 @@
+{
+  "name": "our-days-family-diary",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "test": "node --test server/api.test.mjs server/record-sync.test.mjs"
+  }
+}
