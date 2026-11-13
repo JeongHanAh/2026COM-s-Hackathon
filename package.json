@@ -6,6 +6,6 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server/index.mjs",
-    "test": "node --test server/api.test.mjs server/record-sync.test.mjs"
+    "test": "node --test server/api.test.mjs server/record-sync.test.mjs server/record-order.test.mjs"
   }
 }

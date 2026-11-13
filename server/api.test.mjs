@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
@@ -121,6 +121,61 @@ function uploadHeaders(fixture, authorId) {
     'x-captured-at': fixture.day, 'x-duration-ms': fixture.duration, 'x-record-owner': authorId,
   };
 }
+
+test('legacy upload timestamps survive restart and only manual content changes update them', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'our-days-record-time-'));
+  const statePath = join(dir, 'state.json');
+  const earlier = { id: randomUUID(), capturedAt: '2026-11-11T09:00:00.000Z', uploadedAt: '2026-11-13T09:00:00.000Z', transcript: '먼저 남긴 기록' };
+  const later = { id: randomUUID(), capturedAt: '2026-11-12T09:00:00.000Z', uploadedAt: '2026-11-12T10:00:00.000Z', transcript: '나중에 남긴 기록' };
+  const missing = { id: randomUUID(), capturedAt: '2026-11-10T09:00:00.000Z', transcript: '파일이 없는 기존 기록' };
+  try {
+    await start(dir, { emptyFamily: false });
+    const state = JSON.parse(await readFile(statePath, 'utf8'));
+    for (const item of [earlier, later, missing]) {
+      const fileName = `${item.id}.m4a`;
+      state.records[item.id] = { id: item.id, capturedAt: item.capturedAt, transcript: item.transcript,
+        fileName, authorId: 'family-a', kind: 'audio', mimeType: 'audio/mp4', durationMs: 1000, transcriptStatus: 'ready' };
+      if (item.uploadedAt) {
+        const file = join(dir, 'media', fileName);
+        await writeFile(file, 'existing recording');
+        await utimes(file, new Date(item.uploadedAt), new Date(item.uploadedAt));
+      }
+    }
+    await writeFile(statePath, JSON.stringify(state));
+
+    const owner = browser(await start(dir));
+    assert.equal((await owner.login('a')).status, 200);
+    const list = (await (await owner.request('/api/records')).json()).records;
+    assert.deepEqual(list.map(record => record.id), [missing.id, earlier.id, later.id]);
+    for (const item of [earlier, later, missing]) {
+      const record = list.find(record => record.id === item.id);
+      assert.equal(record.capturedAt, item.capturedAt);
+      assert.equal(record.uploadedAt, item.uploadedAt || item.capturedAt);
+      assert.equal(record.updatedAt, record.uploadedAt);
+    }
+    const patch = await owner.request(`/api/records/${earlier.id}`, { method: 'PATCH', json: { transcript: '고친 기록' } });
+    const edited = (await patch.json()).record;
+    assert.equal(patch.status, 200);
+    assert.equal(edited.capturedAt, earlier.capturedAt);
+    assert.equal(edited.uploadedAt, earlier.uploadedAt);
+    assert.ok(edited.updatedAt > edited.uploadedAt);
+    await setTimeout(10);
+    const same = await owner.request(`/api/records/${earlier.id}`, { method: 'PATCH', json: { transcript: '  고친 기록  ' } });
+    assert.equal((await same.json()).record.updatedAt, edited.updatedAt);
+
+    const restored = browser(await start(dir));
+    assert.equal((await restored.login('b')).status, 200);
+    const saved = (await (await restored.request('/api/records')).json()).records.find(record => record.id === earlier.id);
+    assert.equal(saved.uploadedAt, earlier.uploadedAt);
+    assert.equal(saved.updatedAt, edited.updatedAt);
+    const exportText = await restored.request('/api/export?from=2026-11-11&to=2026-11-12&tz=Asia%2FSeoul&format=txt');
+    assert.equal(exportText.status, 200);
+    const text = await exportText.text();
+    assert.ok(text.indexOf('고친 기록') < text.indexOf(later.transcript), 'exports stay in capture chronology after an update');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test('only the recording author can delete, and tombstones persist without media or transcript', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'our-days-delete-api-'));
@@ -268,6 +323,7 @@ test('authenticated capture replay, chronology, media and all export formats', a
     makeMediaFixture(audio.path, 'audio');
     const wrongAccount = await upload(member, video);
     assert.equal(wrongAccount.status, 409);
+    const beforeUpload = Date.now();
     const videoUpload = await upload(owner, video);
     assert.equal(videoUpload.status, 201, await videoUpload.text());
     const replay = await Promise.all([upload(owner, audio), upload(owner, audio)]);
@@ -278,6 +334,15 @@ test('authenticated capture replay, chronology, media and all export formats', a
     assert.deepEqual(records.map(({ id }) => id), [audio.id, video.id]);
     assert.equal(records[0].authorId, 'family-a');
     assert.equal(records[0].capturedAt, audio.day);
+    for (const record of records) {
+      assert.ok(Date.parse(record.uploadedAt) >= beforeUpload);
+      assert.ok(Date.parse(record.uploadedAt) <= Date.now());
+      assert.equal(record.updatedAt, record.uploadedAt);
+    }
+    const replayRecords = await Promise.all(replay.map(response => response.json()));
+    assert.equal(replayRecords[0].record.uploadedAt, replayRecords[1].record.uploadedAt);
+    assert.equal(replayRecords[0].record.updatedAt, replayRecords[1].record.updatedAt);
+    assert.ok(records[0].uploadedAt > records[1].uploadedAt, 'later upload is newer despite its earlier capture date');
     assert.equal((await browser(app).request(records[0].mediaUrl)).status, 401);
     const range = await member.request(records[0].mediaUrl, { headers: { range: 'bytes=4-7' } });
     assert.equal(range.status, 206);
@@ -286,6 +351,7 @@ test('authenticated capture replay, chronology, media and all export formats', a
     const current = async () => (await (await member.request('/api/records')).json()).records[0];
     // Allow the explicit failed marker to land when no speech recognizer is configured.
     for (let attempt = 0; attempt < 30 && (await current()).transcriptStatus === 'processing'; attempt++) await setTimeout(100);
+    assert.equal((await current()).updatedAt, records[0].updatedAt, 'background recognition does not reorder the timeline');
     const rangeQuery = 'from=2026-11-12&to=2026-11-12&tz=Asia%2FSeoul';
     if ((await current()).transcriptStatus === 'failed') {
       const failedText = await member.request(`/api/export?${rangeQuery}&format=txt`);

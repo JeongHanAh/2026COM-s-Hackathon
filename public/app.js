@@ -4,6 +4,7 @@ import { readDevice, writeDevice, readOutbox, savePending, readDeletions, queueD
 import { syncRecords } from './record-sync.js';
 import { initHome } from './home.js';
 import { commandLabel } from './easter-egg.js';
+import { timelineGroups } from './record-order.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -20,7 +21,7 @@ const labels = { timeline: '기록', archive: '내보내기', home: '집 주변'
 const demoUsers = { a: { name: '서연', email: 'family-a@example.test' }, b: { name: '지우', email: 'family-b@example.test' } };
 const state = {
   session: null, records: [], outbox: [], deletions: [], connected: navigator.onLine,
-  page: 'timeline', date: '', month: startOfMonth(dateKey(Date.now())), filter: 'all',
+  page: 'timeline', date: '', month: startOfMonth(dateKey(Date.now())), filter: 'all', order: 'recent',
   range: { from: dateKey(Date.now() - 6 * 86400000), to: dateKey(Date.now()), mode: 'mixed' }
 };
 let noticeTimer;
@@ -210,23 +211,16 @@ function recordCard(record) {
 
 function renderTimeline() {
   const page = document.querySelector('#page');
-  const all = records();
-  const groups = new Map();
-  for (const item of all) {
-    const date = dateKey(item.capturedAt);
-    if ((state.date && date !== state.date) || (state.filter !== 'all' && state.filter !== item.kind)) continue;
-    if (!groups.has(date)) groups.set(date, []);
-    groups.get(date).push(item);
-  }
+  const groups = timelineGroups(records(), state, dateKey);
   const pending = mine().filter(record => record.approved === true).length;
   const deleting = pendingDeletes().length;
   page.innerHTML = `<div class="dashboard">
     <div class="page-intro diary-intro"><div><p class="record-context">${escape(state.session.family.name)} / 비공개</p><h1>Still</h1></div><div class="diary-tools"><button class="icon-button" data-action="calendar" aria-label="날짜 선택" title="날짜 선택">${icon('timeline', 21)}</button><button class="icon-button" data-action="family" aria-label="공간 멤버" title="공간 멤버">${icon('people', 21)}</button></div></div>
     <div class="dashboard-grid"><div class="diary"><div class="capture-grid">${captureCard('video')}${captureCard('audio')}</div>
     ${!state.connected || pending || deleting ? `<div class="offline-banner" role="status"><div><strong>${[pending ? '업로드 대기 ' + word(pending) : '', deleting ? '삭제 반영 대기 ' + word(deleting) : ''].filter(Boolean).join(' · ') || '오프라인'}</strong><span>${pending || deleting ? '연결되면 반영됩니다.' : '공유를 선택한 기록은 연결 후 업로드됩니다.'}</span></div>${state.connected && (pending || deleting) ? '<button class="text-button" data-action="retry">다시 시도</button>' : ''}</div>` : ''}
-    <section class="timeline"><div class="timeline-header"><div><h2>남긴 기록</h2>${state.date ? `<button class="text-button selected-day" data-action="clear-day">${dayLabel(dateAsNoon(state.date))} ${icon('x', 13)}</button>` : ''}</div>
+    <section class="timeline" aria-label="남긴 기록"><div class="timeline-header"><div><div class="timeline-order"><select id="timeline-order" aria-label="기록 정렬"><option value="recent" ${state.order === 'recent' ? 'selected' : ''}>최근 업데이트순</option><option value="date" ${state.order === 'date' ? 'selected' : ''}>기록 날짜순</option></select>${icon('down', 14)}</div>${state.date ? `<button class="text-button selected-day" data-action="clear-day">${dayLabel(dateAsNoon(state.date))} ${icon('x', 13)}</button>` : ''}</div>
     <div class="filter" aria-label="기록 종류">${Object.entries({ all: '전체', video: '영상', audio: '음성' }).map(([key, value]) => `<button data-action="filter" data-value="${key}" aria-pressed="${key === state.filter}">${value}</button>`).join('')}</div></div>
-    ${groups.size ? [...groups].reverse().map(([date, entries]) => `<div class="timeline-day"><h3><time datetime="${date}">${date.replaceAll('-', '.')}</time><span class="day-week">${formatter({ weekday: 'long' }).format(dateAsNoon(date))}</span></h3><div class="day-records">${entries.map(recordCard).join('')}</div></div>`).join('') : '<div class="panel empty"><h3>아직 기록이 없습니다</h3><p>영상이나 음성으로 안부를 남깁니다.</p></div>'}</section></div>
+    ${groups.length ? groups.map(({ date, records: entries }) => `<div class="timeline-day"><h3><time datetime="${date}">${date.replaceAll('-', '.')}</time><span class="day-week">${formatter({ weekday: 'long' }).format(dateAsNoon(date))}</span></h3><div class="day-records">${entries.map(recordCard).join('')}</div></div>`).join('') : '<div class="panel empty"><h3>아직 기록이 없습니다</h3><p>영상이나 음성으로 안부를 남깁니다.</p></div>'}</section></div>
     </div></div>`;
 }
 
@@ -771,6 +765,7 @@ document.addEventListener('click', async event => {
         if (dialog.open) dialog.close();
         state.records = [];
         state.filter = 'all';
+        state.order = 'recent';
         state.date = '';
         await useSession({ user: null, family: null, demo: state.session.demo });
       } catch { notify('로그아웃하려면 연결이 필요해요.', true); }
@@ -817,6 +812,12 @@ document.addEventListener('submit', async event => {
 });
 
 document.addEventListener('change', event => {
+  if (event.target.id === 'timeline-order') {
+    state.order = event.target.value === 'date' ? 'date' : 'recent';
+    renderTimeline();
+    document.querySelector('#timeline-order')?.focus({ preventScroll: true });
+    return;
+  }
   if (!event.target.closest('.range-panel')) return;
   const page = document.querySelector('#page');
   const from = page.querySelector('[name="from"]').value;

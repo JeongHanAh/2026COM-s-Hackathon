@@ -141,9 +141,10 @@ async function seedDemoRecords(state, mediaDir) {
     const id = entry.id || `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
     const fileName = `${id}${extname(file).toLowerCase()}`;
     await copyFile(join(fixtureDir, file), join(mediaDir, fileName));
+    const capturedAt = new Date(entry.capturedAt ?? Date.now() - entry.hoursAgo * 3600000).toISOString();
     state.records[id] = {
       id, fileName, authorId: entry.authorId, kind: entry.kind,
-      capturedAt: new Date(entry.capturedAt ?? Date.now() - entry.hoursAgo * 3600000).toISOString(),
+      capturedAt, uploadedAt: capturedAt, updatedAt: capturedAt,
       mimeType: entry.mimeType, durationMs: entry.durationMs,
       transcript: entry.transcript ?? null,
       transcriptStatus: entry.kind === 'audio' ? (entry.transcript ? 'ready' : 'processing') : null,
@@ -170,6 +171,23 @@ async function loadState({ dataDir, mediaDir, demo, emptyFamily }) {
     await writeState(statePath, state);
   }
   state.deletedRecords ??= {};
+  let timestampsAdded = false;
+  for (const record of Object.values(state.records)) {
+    if (!record.uploadedAt) {
+      // Original media is immutable; its mtime recovers uploads made before timestamps existed.
+      const original = await stat(join(mediaDir, record.fileName)).catch((error) => {
+        if (error.code !== 'ENOENT') throw error;
+        return null;
+      });
+      record.uploadedAt = original ? original.mtime.toISOString() : record.capturedAt;
+      timestampsAdded = true;
+    }
+    if (!record.updatedAt) {
+      record.updatedAt = record.uploadedAt;
+      timestampsAdded = true;
+    }
+  }
+  if (timestampsAdded) await writeState(statePath, state);
   return { state, statePath };
 }
 
@@ -197,8 +215,8 @@ function sessionView(state, user, demo) {
 }
 
 function recordView(state, record) {
-  const { id, kind, capturedAt, durationMs, authorId, transcript, transcriptStatus } = record;
-  return { id, kind, capturedAt, durationMs, authorId, authorName: state.users[authorId].name,
+  const { id, kind, capturedAt, uploadedAt, updatedAt, durationMs, authorId, transcript, transcriptStatus } = record;
+  return { id, kind, capturedAt, uploadedAt, updatedAt, durationMs, authorId, authorName: state.users[authorId].name,
     mediaUrl: `/api/records/${id}/media`, transcript, transcriptStatus };
 }
 
@@ -484,7 +502,8 @@ export async function createApp({
           if (existing.authorId === user.id) return { record: existing, created: false };
           throw new HttpError(409, '이미 사용된 기록 번호예요.', 'RECORD_CONFLICT');
         }
-        const stored = { id: info.id, fileName, kind: info.kind, capturedAt: info.capturedAt,
+        const uploadedAt = new Date().toISOString();
+        const stored = { id: info.id, fileName, kind: info.kind, capturedAt: info.capturedAt, uploadedAt, updatedAt: uploadedAt,
           mimeType: observed.mimeType || info.mimeType, durationMs: observed.durationMs || info.durationMs,
           authorId: user.id, transcript: null, transcriptStatus: info.kind === 'audio' ? 'processing' : null };
         await rename(uploadPath, finalPath);
@@ -628,6 +647,7 @@ export async function createApp({
         const updated = await mutate((draft) => {
           const stored = draft.records[record.id];
           if (!stored) throw new HttpError(404, '기록을 찾을 수 없어요.');
+          if (stored.transcript !== transcript || stored.transcriptStatus !== 'ready') stored.updatedAt = new Date().toISOString();
           stored.transcript = transcript;
           stored.transcriptStatus = 'ready';
           return stored;
