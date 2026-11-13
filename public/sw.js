@@ -1,6 +1,6 @@
-const CACHE = 'our-days-shell-v16';
+const CACHE = 'our-days-shell-v17';
 const SHELL = [
-  '/', '/styles.css', '/app.js', '/device.js', '/record-sync.js', '/record-order.js', '/easter-egg.js', '/icons.js', '/home.js', '/home.css', '/icon.svg', '/manifest.webmanifest',
+  '/', '/styles.css', '/app.js', '/device.js', '/auth-state.js', '/record-sync.js', '/record-order.js', '/easter-egg.js', '/icons.js', '/home.js', '/home.css', '/icon.svg', '/manifest.webmanifest',
   '/unosat-al-shati-2025-07-08.webp', '/unosat-al-shati-2025-10-11.webp'
 ];
 
@@ -18,7 +18,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
-  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
   if (request.mode !== 'navigate' && !SHELL.includes(url.pathname)) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);

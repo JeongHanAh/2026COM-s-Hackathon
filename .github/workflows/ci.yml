@@ -1,0 +1,27 @@
+name: Verify Still
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - run: npm ci --ignore-scripts
+      - run: npm test
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t still-check .
+      - name: Verify media programs in image
+        run: docker run --rm still-check node --input-type=module -e "import { getMediaCapabilities } from './server/media.mjs'; const c = await getMediaCapabilities(); console.log(c); if (!c.conversion || !c.transcription) process.exit(1);"

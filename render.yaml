@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: still
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: STILL_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: STILL_SESSION_SECRET
+        generateValue: true
+      - key: OURDAYS_ORIGIN
+        sync: false
+      - key: OURDAYS_SECURE_COOKIE
+        value: "1"

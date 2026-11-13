@@ -5,6 +5,7 @@ import { syncRecords } from './record-sync.js';
 import { initHome } from './home.js';
 import { commandLabel } from './easter-egg.js';
 import { timelineGroups } from './record-order.js';
+import { anonymousSession, offlineSession, isNetworkFailure, validateAuthFields } from './auth-state.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -22,6 +23,7 @@ const demoUsers = { a: { name: '서연', email: 'family-a@example.test' }, b: { 
 const state = {
   session: null, records: [], outbox: [], deletions: [], connected: navigator.onLine,
   page: 'timeline', date: '', month: startOfMonth(dateKey(Date.now())), filter: 'all', order: 'recent',
+  authPage: 'login', authEmail: '', authNotice: '', serviceError: '', onboardingPage: 'choice',
   range: { from: dateKey(Date.now() - 6 * 86400000), to: dateKey(Date.now()), mode: 'mixed' }
 };
 let noticeTimer;
@@ -37,6 +39,8 @@ let captureDraft;
 let captureDraftUrl;
 let capturePreviewTimer;
 let savingCapture = false;
+let starting;
+let sessionVersion = 0;
 const localMediaUrls = new Map();
 const durationLabel = milliseconds => {
   const seconds = Math.max(1, Math.round(milliseconds / 1000));
@@ -49,12 +53,18 @@ function escape(value) {
 
 async function api(path, options = {}) {
   const { json, ...request } = options;
-  const response = await fetch(path, {
-    cache: 'no-store', credentials: 'same-origin',
-    signal: AbortSignal.timeout(path === '/api/records' && request.method === 'POST' ? 45000 : 8000),
-    ...request,
-    ...(json !== undefined ? { body: JSON.stringify(json), headers: { 'Content-Type': 'application/json', ...request.headers } } : {})
-  });
+  const sessionAtRequest = sessionVersion;
+  let response;
+  try {
+    response = await fetch(path, {
+      cache: 'no-store', credentials: 'same-origin',
+      signal: AbortSignal.timeout(path === '/api/records' && request.method === 'POST' ? 45000 : 12000),
+      ...request,
+      ...(json !== undefined ? { body: JSON.stringify(json), headers: { 'Content-Type': 'application/json', ...request.headers } } : {})
+    });
+  } catch (failure) {
+    throw Object.assign(new Error('인터넷 연결을 확인해 주세요.', { cause: failure }), { network: true });
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const message = typeof payload.error === 'string' && /[가-힣]/.test(payload.error) ? payload.error : {
@@ -62,9 +72,14 @@ async function api(path, options = {}) {
       404: '선택한 기록을 찾을 수 없습니다.', 409: '다른 계정으로 연결되어 있습니다.',
       422: '파일을 처리할 수 없습니다.', 429: '잠시 뒤 다시 시도해 주세요.', 503: '서버에서 파일을 만들 수 없습니다.'
     }[response.status];
+    if (sessionAtRequest === sessionVersion && (
+      response.status === 401 && path !== '/api/login' && state.session?.user
+      || response.status === 403 && (payload.code === 'FAMILY_REQUIRED' || ['/api/session', '/api/records'].includes(path)))) await clearAccess();
     throw Object.assign(new Error(message || '요청을 처리하지 못했습니다.'), { status: response.status, code: payload.code });
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  try { return await response.json(); }
+  catch { throw Object.assign(new Error('서버 응답을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.'), { status: 502 }); }
 }
 
 function notify(message, error = false) {
@@ -125,12 +140,17 @@ function render() {
     }
   }
   app.className = '';
+  if (state.serviceError) {
+    renderSignature = null;
+    app.innerHTML = authLayout(`<h2>연결을 확인해 주세요</h2><p class="auth-description" role="alert">${escape(state.serviceError)}</p><button class="button primary full" data-action="check-connection">다시 연결</button>`);
+    return;
+  }
   const user = state.session?.user;
   const family = state.session?.family;
   const signature = JSON.stringify([user?.id, family?.id, state.page, user?.name, family?.name]);
-  if (!user || !family) {
+  if (state.session?.recovery || !user || !family) {
     renderSignature = null;
-    app.innerHTML = user ? onboarding() : login();
+    app.innerHTML = state.session?.recovery ? login('password-update') : user ? onboarding() : login();
     return;
   }
   if (signature !== renderSignature) {
@@ -143,24 +163,47 @@ function render() {
   if (state.page === 'archive') renderArchive();
 }
 
-function login() {
+function authLayout(content) {
   return `<main class="login-shell">
     <section class="login-story">${brand()}<div class="login-heading"><h1>Still</h1><p>가까운 사람들과 나누는 일상</p></div><span class="story-label">비공개 기록 공간</span></section>
-    <section class="login-panel"><div class="login-form-wrap"><h2>기록 공간 로그인</h2><form data-form="login" class="stacked">
-      <label>이메일<input name="email" type="email" autocomplete="username" required placeholder="이메일 주소"></label>
-      <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
-      <button class="button primary" type="submit">로그인 ${icon('arrow', 17)}</button>
-      <p class="form-error" hidden role="alert"></p></form>
-      ${state.session?.demo ? `<div class="demo-users"><p>해커톤 시연 계정</p><div><button class="button outline" data-action="demo" data-value="a">서연으로 들어가기</button><button class="button outline" data-action="demo" data-value="b">지우로 들어가기</button></div></div>` : ''}
-      ${state.connected ? '' : '<p class="muted">첫 로그인에는 인터넷 연결이 필요합니다.</p>'}
-    </div></section>
+    <section class="login-panel"><div class="login-form-wrap">${content}</div></section>
   </main>`;
 }
 
+function login(requested = state.authPage) {
+  const supported = requested === 'password-update' || requested === 'sent'
+    || requested === 'signup' && state.session?.auth?.signup
+    || requested === 'reset' && state.session?.auth?.recovery;
+  const mode = supported ? requested : 'login';
+  const notice = state.authNotice ? `<p class="auth-description" role="status">${escape(state.authNotice)}</p>` : '';
+  if (mode === 'sent') return authLayout(`<h2>이메일을 확인해 주세요</h2>${notice}<button class="button primary full" data-action="auth-page" data-value="login">로그인으로 돌아가기</button>`);
+  const heading = { login: '로그인', signup: '계정 만들기', reset: '비밀번호 찾기', 'password-update': '새 비밀번호' }[mode];
+  const submit = { login: '로그인', signup: '계정 만들기', reset: '재설정 메일 받기', 'password-update': '비밀번호 저장' }[mode];
+  const description = mode === 'signup' ? '이메일로 계정을 만들고, 함께할 공간에 참여하세요.'
+    : mode === 'reset' ? '가입한 이메일로 비밀번호 재설정 링크를 보내드립니다.'
+    : mode === 'password-update' ? '앞으로 사용할 비밀번호를 입력해 주세요.' : '';
+  return authLayout(`<h2>${heading}</h2>${description ? `<p class="auth-description">${description}</p>` : ''}${notice}
+    <form data-form="${mode}" class="stacked auth-form">
+      ${mode === 'signup' ? '<label>이름<input name="name" autocomplete="name" maxlength="48" required></label>' : ''}
+      ${mode !== 'password-update' ? `<label>이메일<input name="email" type="email" autocomplete="${mode === 'signup' ? 'email' : 'username'}" value="${escape(state.authEmail)}" maxlength="254" required></label>` : ''}
+      ${mode !== 'reset' ? `<label>${mode === 'password-update' ? '새 비밀번호' : '비밀번호'}<input name="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" ${mode !== 'login' ? 'minlength="10" aria-describedby="password-help"' : ''} maxlength="128" required></label>` : ''}
+      ${['signup', 'password-update'].includes(mode) ? '<p class="field-note" id="password-help">10자 이상으로 입력해 주세요.</p><label>비밀번호 확인<input name="passwordConfirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>' : ''}
+      <button class="button primary" type="submit" ${!state.connected ? 'disabled' : ''}>${submit} ${icon('arrow', 17)}</button><p class="form-error" hidden role="alert"></p>
+    </form>
+    <div class="auth-links">${mode === 'login'
+      ? `${state.session?.auth?.signup ? '<button class="text-button" data-action="auth-page" data-value="signup">계정 만들기</button>' : ''}${state.session?.auth?.recovery ? '<button class="text-button" data-action="auth-page" data-value="reset">비밀번호 찾기</button>' : ''}`
+      : mode === 'password-update' ? '<button class="text-button" data-action="logout">로그아웃</button>' : '<button class="text-button" data-action="auth-page" data-value="login">로그인으로 돌아가기</button>'}</div>
+    ${state.session?.demo && mode === 'login' ? `<div class="demo-users"><p>해커톤 시연 계정</p><div><button class="button outline" data-action="demo" data-value="a">서연으로 들어가기</button><button class="button outline" data-action="demo" data-value="b">지우로 들어가기</button></div></div>` : ''}
+    ${!state.connected ? '<p class="auth-description" role="status">로그인하려면 인터넷 연결이 필요합니다.</p>' : ''}`);
+}
+
 function onboarding() {
-  return `<main class="onboarding">${brand()}<div class="panel onboarding-panel"><h1>기록 공간에 참여하기</h1><p>${escape(state.session.user.name)}님, 기록 공간을 만들거나 초대 코드를 입력해 주세요.</p>
-  <form class="stacked" data-form="create-family"><label>기록 공간 이름<input name="name" maxlength="48" value="우리 공간" required></label><button class="button primary">기록 공간 만들기</button><p class="form-error" hidden role="alert"></p></form>
-  <form class="stacked" data-form="join"><label>함께할 사람에게 받은 초대 코드<input name="code" required autocomplete="off" maxlength="80"></label><button class="button outline">초대 코드로 참여하기</button><p class="form-error" hidden role="alert"></p></form>
+  const mode = state.onboardingPage;
+  return `<main class="onboarding">${brand()}<div class="panel onboarding-panel"><h1>${mode === 'create' ? '공간 만들기' : mode === 'join' ? '초대받은 공간' : '함께할 공간'}</h1><p>${escape(state.session.user.name)}님, ${mode === 'create' ? '가까운 사람들과 사용할 이름을 정해 주세요.' : mode === 'join' ? '전달받은 초대 코드를 입력해 주세요.' : '새 공간을 만들거나 초대받은 공간에 참여하세요.'}</p>
+  ${mode === 'create' ? '<form class="stacked" data-form="create-family"><label>공간 이름<input name="name" maxlength="48" placeholder="우리 가족" required></label><button class="button primary" type="submit">공간 만들기</button><p class="form-error" hidden role="alert"></p></form>'
+    : mode === 'join' ? '<form class="stacked" data-form="join"><label>초대 코드<input name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="80"></label><button class="button primary" type="submit">공간에 참여하기</button><p class="form-error" hidden role="alert"></p></form>'
+    : '<div class="onboarding-choices"><button class="button primary" data-action="setup-page" data-value="create">새 공간 만들기</button><button class="button outline" data-action="setup-page" data-value="join">초대 코드 입력</button></div>'}
+  ${mode !== 'choice' ? '<button class="text-button" data-action="setup-page" data-value="choice">뒤로</button>' : ''}
   <button class="text-button" data-action="logout">로그아웃</button></div></main>`;
 }
 
@@ -298,8 +341,12 @@ dialog.addEventListener('cancel', event => { if (savingCapture) event.preventDef
 
 function familyModal() {
   const { family, user } = state.session;
+  const cloudOwner = state.session.backend === 'supabase' && user.role === 'owner';
+  const expiration = Date.parse(family.inviteExpiresAt);
+  const expired = Number.isFinite(expiration) && expiration <= Date.now();
   modal(escape(family.name), `<p class="dialog-note">초대된 멤버만 볼 수 있습니다.</p><div class="member-list dialog-members">${family.members.map(member => `<div>${memberBadge(member)}<span>${escape(member.name)}</span>${member.id === user.id ? '<small>나</small>' : ''}</div>`).join('')}</div>
-  ${family.inviteCode ? `<div class="invite-box"><label for="invite-code">초대 코드</label><div><input id="invite-code" readonly value="${escape(family.inviteCode)}"><button class="button outline" data-action="copy-invite">${icon('copy', 16)} 복사</button></div><small>함께할 사람에게 코드를 전해 주세요.</small></div>` : ''}`);
+  ${family.inviteCode || cloudOwner ? `<div class="invite-box">${family.inviteCode && !expired ? `<label for="invite-code">초대 코드</label><div><input id="invite-code" readonly value="${escape(family.inviteCode)}"><button class="button outline" data-action="copy-invite">${icon('copy', 16)} 복사</button></div><small>${Number.isFinite(expiration) ? `${formatter({ month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(expiration)}까지 사용 가능합니다.` : '함께할 사람에게 코드를 전해 주세요.'}</small>` : '<p class="invite-status">사용할 수 있는 초대 코드가 없습니다.</p>'}
+  ${cloudOwner ? `<div class="invite-actions"><button class="text-button" data-action="rotate-invite" ${state.connected ? '' : 'disabled'}>새 초대 코드 만들기</button></div><small>${state.connected ? '새 코드를 만들면 이전 코드는 만료됩니다.' : '연결 후 초대 코드를 만들 수 있습니다.'}</small>` : ''}</div>` : ''}<p class="form-error" role="alert" hidden></p>`);
 }
 
 function calendarModal() {
@@ -562,17 +609,22 @@ async function deleteRecord(id, button) {
 
 async function exportFile(format, preview = false) {
   const key = partition();
+  const sessionAtExport = sessionVersion;
   const params = new URLSearchParams({ ...state.range, format, tz: zone });
   const version = preview ? modal('내보낸 영상 미리보기', '<p class="dialog-note" role="status">서버에서 영상을 이어 붙이는 중…</p>', 'media-dialog') : null;
   if (!preview) notify('서버에서 파일을 만드는 중이에요.');
-  const isCurrent = () => partition() === key && (!preview || (dialog.open && modalVersion === version));
+  const isCurrent = () => sessionAtExport === sessionVersion && partition() === key && (!preview || (dialog.open && modalVersion === version));
   try {
     await sync();
     await readLocal();
     if (!isCurrent()) return;
     if (familyDeletes().length) throw new Error('deletions pending');
     const response = await fetch('/api/export?' + params, { cache: 'no-store' });
-    if (!response.ok) throw new Error();
+    if (!isCurrent()) return;
+    if (!response.ok) {
+      if ([401, 403].includes(response.status)) await clearAccess();
+      throw new Error();
+    }
     const blob = await response.blob();
     if (!isCurrent()) return;
     if (preview) {
@@ -582,7 +634,7 @@ async function exportFile(format, preview = false) {
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;
-      link.download = `우리의-일상-기록_${params.get('from')}_${params.get('to')}.${format}`;
+      link.download = `Still_${params.get('from')}_${params.get('to')}.${format}`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(href), 30000);
       notify('파일을 준비했어요.');
@@ -595,48 +647,91 @@ async function exportFile(format, preview = false) {
 }
 
 async function useSession(session) {
-  if (partition(session) !== partition()) {
+  const version = ++sessionVersion;
+  const previous = partition();
+  const changed = partition(session) !== previous || session?.recovery || state.session?.recovery
+    || state.session?.user?.role !== session?.user?.role;
+  if (changed) {
     state.records = [];
     stopCapture?.();
     discardCaptureDraft();
     if (dialog.open) dialog.close();
   }
   state.session = session;
-  await readLocal();
-  await writeDevice('session', session?.user && session?.family ? {
-    ...session, family: { ...session.family, inviteCode: undefined }
-  } : null).catch(() => {});
-  if (partition()) await loadRecords();
+  state.serviceError = '';
+  state.connected = true;
+  if (changed) render();
+  const previousCache = previous || partition(await readDevice('session').catch(() => null));
+  if (version !== sessionVersion) return;
+  if (previousCache && (previousCache !== partition(session) || session?.recovery)) await writeDevice('records:' + previousCache, []).catch(() => {});
+  if (version !== sessionVersion) return;
+  await readLocal().catch(() => {});
+  if (version !== sessionVersion) return;
+  await writeDevice('session', offlineSession(session)).catch(() => {});
+  if (version !== sessionVersion) return;
+  if (partition() && !session?.recovery) await loadRecords();
+  if (version !== sessionVersion) return;
   render();
-  sync();
+  if (!session?.recovery) sync();
+}
+
+async function clearAccess(broadcast = true, renderNow = true) {
+  const version = ++sessionVersion;
+  const previous = partition();
+  state.records = [];
+  state.session = anonymousSession(state.session);
+  state.authPage = 'login';
+  state.authNotice = '';
+  state.onboardingPage = 'choice';
+  state.serviceError = '';
+  stopCapture?.();
+  discardCaptureDraft();
+  if (dialog.open) dialog.close();
+  if (renderNow) render();
+  if (broadcast) localChannel?.postMessage({ type: 'signed-out' });
+  const previousCache = previous || partition(await readDevice('session').catch(() => null));
+  if (version !== sessionVersion) return;
+  await Promise.allSettled([
+    writeDevice('session', null),
+    ...(previousCache ? [writeDevice('records:' + previousCache, [])] : [])
+  ]);
 }
 
 async function loadRecords() {
   const key = partition();
+  const version = sessionVersion;
   if (!key) return;
   try {
     const { records } = await api('/api/records');
-    if (partition() !== key) return;
+    if (partition() !== key || version !== sessionVersion) return;
     await readLocal();
-    if (partition() !== key) return;
+    if (partition() !== key || version !== sessionVersion) return;
     state.records = records.filter(record => !deleted(record));
     state.connected = true;
+    state.serviceError = '';
     await writeDevice('records:' + key, state.records).catch(() => {});
   } catch (error) {
-    if (partition() !== key) return;
-    if (!error.status) state.connected = false;
-    if (error.status === 401 || error.status === 403) state.records = [];
-    else {
+    if (partition() !== key || version !== sessionVersion) return;
+    if (error.status === 401 || error.status === 403) {
+      await clearAccess();
+    } else if (isNetworkFailure(error)) {
+      state.connected = false;
       const cached = await readDevice('records:' + key).catch(() => []);
-      if (partition() !== key) return;
+      if (partition() !== key || version !== sessionVersion) return;
       state.records = (cached || state.records).filter(record => !deleted(record));
+    } else {
+      state.records = [];
+      state.serviceError = error.message;
     }
   }
 }
 
 const localChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('our-days-records') : null;
 const announceLocalChange = () => localChannel?.postMessage('changed');
-localChannel?.addEventListener('message', () => { refresh(); });
+localChannel?.addEventListener('message', event => {
+  if (event.data?.type === 'signed-out') clearAccess(false);
+  else refresh();
+});
 
 async function readLocal() {
   const before = JSON.stringify([state.outbox.map(({id, approved}) => [id, approved]), state.deletions]);
@@ -648,36 +743,39 @@ async function readLocal() {
 function sync() {
   if (syncTask) return syncTask;
   const key = partition();
-  if (!key || !navigator.onLine) return Promise.resolve();
+  const version = sessionVersion;
+  const isCurrent = () => partition() === key && version === sessionVersion;
+  if (!key || !navigator.onLine || state.session?.recovery || state.serviceError) return Promise.resolve();
   syncTask = (async () => {
     syncing = true;
     let shouldRender = false;
     try {
       shouldRender = await readLocal();
-      if (partition() !== key) return;
+      if (!isCurrent()) return;
       if (!pendingDeletes().length && !mine().some(record => record.approved === true && !notifiedUploads.has(record.id))) return;
       shouldRender = true;
       const result = await syncRecords({
         partition: key, authorId: state.session.user.id, familyId: state.session.family.id,
-        store: device, api, isCurrent: () => partition() === key, skipIds: notifiedUploads,
+        store: device, api, isCurrent, skipIds: notifiedUploads,
         onRejected(record) {
+          if (!isCurrent()) return;
           notifiedUploads.add(record.id);
           notify('파일을 읽지 못했습니다. 기기에 보관 중이니 다시 시도하거나 삭제해 주세요.', true);
         },
         async onUploaded(record) {
           await readLocal();
-          if (partition() !== key || deleted(record)) return;
+          if (!isCurrent() || deleted(record)) return;
           state.records = [...shared().filter(item => item.id !== record.id), record];
           await writeDevice('records:' + key, state.records).catch(() => {});
         }
       });
-      if (partition() !== key) return;
+      if (!isCurrent()) return;
       if (result.uploaded) notify(`기록 ${word(result.uploaded)}를 공간에 공유했습니다.`);
       else if (result.deleted) notify('삭제를 반영했습니다.');
       if (result.uploaded || result.deleted) announceLocalChange();
     } catch (error) {
-      if (partition() === key) {
-        if (!error.status) state.connected = false;
+      if (isCurrent()) {
+        if (isNetworkFailure(error)) state.connected = false;
         else notify(error.message, true);
       }
     } finally {
@@ -691,23 +789,29 @@ function sync() {
 }
 
 async function refresh() {
-  if (refreshing || !partition()) return;
+  if (refreshing || !partition() || state.session?.recovery) return;
   refreshing = true;
   const before = JSON.stringify(state.records);
   const connected = state.connected;
+  const serviceError = state.serviceError;
+  const version = sessionVersion;
   try {
     const localChanged = await readLocal();
     if (localChanged) { state.records = shared(); render(); }
     if (syncing || !navigator.onLine) return;
     const session = await api('/api/session');
+    if (version !== sessionVersion) return;
     if (JSON.stringify(session) !== JSON.stringify(state.session)) {
       await useSession(session);
       return;
     }
     await loadRecords();
-    if (before !== JSON.stringify(state.records) || connected !== state.connected) render();
-  } catch {
-    if (state.connected) { state.connected = false; render(); }
+    if (before !== JSON.stringify(state.records) || connected !== state.connected || serviceError !== state.serviceError) render();
+  } catch (error) {
+    if (version !== sessionVersion) return;
+    if (isNetworkFailure(error)) state.connected = false;
+    else if (![401, 403].includes(error.status)) state.serviceError = error.message;
+    render();
   } finally {
     refreshing = false;
   }
@@ -719,6 +823,16 @@ document.addEventListener('click', async event => {
   if (!button) return;
   const { action, value } = button.dataset;
   switch (action) {
+    case 'auth-page': {
+      state.authEmail = app.querySelector('[name="email"]')?.value || state.authEmail;
+      state.authPage = ['login', 'signup', 'reset'].includes(value) ? value : 'login';
+      state.authNotice = '';
+      render();
+      app.querySelector('input')?.focus();
+      break;
+    }
+    case 'setup-page': state.onboardingPage = ['create', 'join'].includes(value) ? value : 'choice'; render(); app.querySelector('input')?.focus(); break;
+    case 'check-connection': button.disabled = true; await start(); break;
     case 'capture': openCapture(value); break;
     case 'filter': state.filter = value; renderTimeline(); break;
     case 'month': {
@@ -758,18 +872,39 @@ document.addEventListener('click', async event => {
       catch { code.select(); notify('선택한 초대 코드를 복사해 주세요.'); }
       break;
     }
+    case 'rotate-invite': {
+      const version = sessionVersion;
+      button.disabled = true;
+      try {
+        const session = await api('/api/invite/rotate', { method: 'POST' });
+        if (version !== sessionVersion) return;
+        await useSession(session);
+        if (state.session?.family) familyModal();
+        notify('새 초대 코드를 만들었습니다.');
+      } catch (failure) {
+        if (version !== sessionVersion) return;
+        const note = dialog.querySelector('.form-error');
+        if (note) { note.textContent = failure.message; note.hidden = false; }
+      } finally { button.disabled = false; }
+      break;
+    }
     case 'switch':
-    case 'logout':
+    case 'logout': {
+      const version = sessionVersion;
       try {
         await api('/api/logout', { method: 'POST' });
-        if (dialog.open) dialog.close();
-        state.records = [];
+        if (version !== sessionVersion) return;
         state.filter = 'all';
         state.order = 'recent';
         state.date = '';
-        await useSession({ user: null, family: null, demo: state.session.demo });
-      } catch { notify('로그아웃하려면 연결이 필요해요.', true); }
+        await clearAccess();
+      } catch (failure) {
+        if (version !== sessionVersion) return;
+        if (failure.code === 'LOGOUT_REVOKE_FAILED') await clearAccess();
+        if (failure.status !== 401) notify(isNetworkFailure(failure) ? '로그아웃하려면 연결이 필요해요.' : failure.message, true);
+      }
       break;
+    }
     case 'demo': {
       const form = app.querySelector('[data-form="login"]');
       form.elements.email.value = demoUsers[value].email;
@@ -787,23 +922,51 @@ document.addEventListener('submit', async event => {
   const fields = Object.fromEntries(new FormData(form));
   const submit = form.querySelector('button[type="submit"],button');
   const error = form.querySelector('.form-error');
+  const version = sessionVersion;
   error.hidden = true;
   submit.disabled = true;
   try {
     const action = form.dataset.form;
+    const validation = validateAuthFields(action, fields);
+    if (validation) {
+      error.textContent = validation;
+      error.hidden = false;
+      return;
+    }
     if (action === 'edit') {
       const { record } = await api('/api/records/' + encodeURIComponent(form.dataset.id), { method: 'PATCH', json: fields });
+      if (version !== sessionVersion) return;
       state.records = state.records.map(item => item.id === record.id ? record : item);
       await writeDevice('records:' + partition(), state.records).catch(() => {});
+      if (version !== sessionVersion) return;
       dialog.close();
       render();
       notify('텍스트를 수정했어요.');
       return;
     }
-    const path = { login: '/api/login', 'create-family': '/api/family', join: '/api/invite/accept' }[action];
-    await useSession(await api(path, { method: 'POST', json: fields }));
+    const path = { login: '/api/login', signup: '/api/signup', reset: '/api/password/reset', 'password-update': '/api/password/update', 'create-family': '/api/family', join: '/api/invite/accept' }[action];
+    if (!path) return;
+    const { passwordConfirm, ...payload } = fields;
+    const result = await api(path, { method: 'POST', json: payload });
+    if (version !== sessionVersion) return;
+    state.authEmail = fields.email || state.authEmail;
+    if (action === 'reset' || result?.confirmationRequired) {
+      state.authPage = 'sent';
+      state.authNotice = action === 'reset' ? '가입된 이메일이라면 재설정 링크를 보냈습니다. 메일이 보이지 않으면 스팸함도 확인해 주세요.'
+        : '확인 메일을 보냈습니다. 이메일의 링크를 연 뒤 로그인해 주세요.';
+      form.reset();
+      render();
+      return;
+    }
+    state.authPage = 'login';
+    state.authNotice = '';
+    const session = result?.user !== undefined ? result : await api('/api/session');
+    if (version !== sessionVersion) return;
+    await useSession(session);
+    if (action === 'password-update') notify('비밀번호를 변경했습니다.');
   } catch (failure) {
-    error.textContent = !failure.status ? '인터넷 연결을 확인해 주세요.' :
+    if (version !== sessionVersion) return;
+    error.textContent = isNetworkFailure(failure) ? '인터넷 연결을 확인해 주세요.' :
       form.dataset.form === 'login' && failure.status === 401 ? '이메일과 비밀번호를 확인해 주세요.' : failure.message;
     error.hidden = false;
   } finally {
@@ -844,25 +1007,49 @@ window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);
 });
 window.addEventListener('offline', () => { state.connected = false; render(); });
-window.addEventListener('online', () => { refresh(); });
+window.addEventListener('online', () => { partition() ? refresh() : start(); });
 window.addEventListener('focus', refresh);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, 3500);
 
 async function start() {
+  if (starting) return starting;
+  starting = (async () => {
+  const version = sessionVersion;
   setPage();
+  const query = new URLSearchParams(location.search);
+  if (query.has('auth_error')) {
+    state.authNotice = '링크가 만료되었거나 이미 사용되었습니다. 새 메일을 요청해 주세요.';
+    query.delete('auth_error');
+    history.replaceState(null, '', location.pathname + (query.size ? '?' + query : '') + location.hash);
+  }
   await readLocal().catch(() => {});
+  if (version !== sessionVersion) return;
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
   try {
-    await useSession(await api('/api/session'));
-  } catch {
-    state.connected = false;
-    state.session = await readDevice('session').catch(() => null);
-    if (partition()) state.records = await readDevice('records:' + partition()).catch(() => []) || [];
+    const session = await api('/api/session');
+    if (version !== sessionVersion) return;
+    await useSession(session);
+  } catch (error) {
+    if (version !== sessionVersion) return;
+    if (isNetworkFailure(error)) {
+      state.connected = false;
+      state.serviceError = '';
+      const cachedSession = offlineSession(await readDevice('session').catch(() => null));
+      const cachedRecords = partition(cachedSession) ? await readDevice('records:' + partition(cachedSession)).catch(() => []) || [] : [];
+      if (version !== sessionVersion) return;
+      state.session = cachedSession;
+      state.records = cachedRecords;
+    } else {
+      await clearAccess(false, false);
+      state.serviceError = [401, 403].includes(error.status) ? '' : error.message;
+    }
     render();
   }
+  })().finally(() => { starting = undefined; });
+  return starting;
 }
 
 start();

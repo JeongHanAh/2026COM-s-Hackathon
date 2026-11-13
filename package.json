@@ -3,9 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "start": "node server/index.mjs",
-    "test": "node --test server/api.test.mjs server/record-sync.test.mjs server/record-order.test.mjs"
+    "start": "node server/start.mjs",
+    "demo": "node server/start.mjs --demo",
+    "test": "node --test server/*.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
   }
 }

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -97,7 +97,11 @@ async function withScratch(task) {
   try {
     return await task(directory);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    const target = resolve(directory);
+    if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('our-days-media-')) {
+      throw new Error('Refusing to remove an unexpected temporary directory.');
+    }
+    await rm(target, { recursive: true, force: true });
   }
 }
 

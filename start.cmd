@@ -23,8 +23,8 @@ if not "%OURDAYS_MEDIA_SETUP%"=="0" (
   if errorlevel 1 goto :setup_failed
 )
 echo Open the address printed by the server in your browser.
-echo Keep this window open while using the demo.
-node server\index.mjs
+echo Keep this window open while using Still.
+node server\start.mjs %*
 if errorlevel 1 pause
 exit /b %ERRORLEVEL%
 

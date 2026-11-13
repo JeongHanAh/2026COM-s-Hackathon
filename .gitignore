@@ -9,6 +9,8 @@
 # Downloaded executables and speech models
 /.tools/
 /node_modules/
+/.local/
+/.cache/
 
 # Local configuration, passwords and certificates
 .env
