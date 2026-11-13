@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { demoHome, viewHome } from './home.mjs';
+import { createPlaceNewsService } from './place-news.mjs';
 import * as media from './media.mjs';
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
@@ -203,6 +204,7 @@ export async function createApp({
   demo = process.env.OURDAYS_DEMO !== '0',
   emptyFamily = process.env.OURDAYS_EMPTY_FAMILY === '1',
   tls,
+  placeNews = createPlaceNewsService(),
 } = {}) {
   const mediaDir = join(resolve(dataDir), 'media');
   const loaded = await loadState({ dataDir: resolve(dataDir), mediaDir, demo, emptyFamily });
@@ -211,6 +213,14 @@ export async function createApp({
   const activeTranscripts = new Set();
   const loginAttempts = new Map();
   const dummyCredentials = passwordDigest(randomUUID());
+  const homeRequests = new Map();
+  function guardHome(userId) {
+    const now = Date.now();
+    const previous = homeRequests.get(userId);
+    const entry = previous && previous.until > now ? previous : { count: 0, until: now + 60000 };
+    homeRequests.set(userId, entry);
+    if (++entry.count > 20) throw new HttpError(429, '잠시 뒤 다시 시도해 주세요.', 'RATE_LIMIT');
+  }
 
   // A durable deletion also covers interruption between the state commit and unlink.
   if (Object.keys(state.deletedRecords).length) {
@@ -475,6 +485,32 @@ export async function createApp({
         query.inline && query.format === 'mp4', request.headers.range);
     }
 
+    if (pathname === '/api/home/search' && method === 'POST') {
+      if (state.home.ownerId !== user.id) throw new HttpError(403, '지역을 등록한 사람만 검색할 수 있습니다.');
+      guardHome(user.id);
+      const { query } = await readJson(request);
+      return json(response, { places: await placeNews.searchPlaces(query) });
+    }
+    if (pathname === '/api/home/location' && method === 'PUT') {
+      if (state.home.ownerId !== user.id) throw new HttpError(403, '지역을 등록한 사람만 수정할 수 있습니다.');
+      guardHome(user.id);
+      const { location } = await readJson(request);
+      const expectedAddress = state.home.address;
+      const verified = await placeNews.resolveLocation(location);
+      await mutate(draft => {
+        if (draft.home.address !== expectedAddress) throw new HttpError(409, '주소가 변경됐어요. 지역을 다시 선택해 주세요.', 'HOME_CHANGED');
+        draft.home.location = verified;
+      });
+      return json(response, { home: viewHome(state.home, user.id) });
+    }
+    if (pathname === '/api/home/news' && method === 'GET') {
+      guardHome(user.id);
+      if (!state.home.location) throw new HttpError(409, '먼저 지역을 등록해 주세요.', 'HOME_LOCATION_REQUIRED');
+      const location = state.home.location;
+      const news = await placeNews.getNews(location);
+      if (state.home.location?.id !== location.id) throw new HttpError(409, '지역이 변경됐어요. 다시 불러와 주세요.', 'HOME_CHANGED');
+      return json(response, { news });
+    }
     if (pathname === '/api/home') {
       if (method === 'GET') return json(response, { home: viewHome(state.home, user.id) });
       if (method === 'PUT') {
@@ -483,7 +519,10 @@ export async function createApp({
         const address = typeof body.address === 'string' && body.address.trim();
         if (!address || address.length > 200) throw new HttpError(400, '상세 주소를 1~200자로 입력해 주세요.');
         await mutate((draft) => {
-          if (draft.home.address !== address) delete draft.home.buildingMatch;
+          if (draft.home.address !== address) {
+            delete draft.home.buildingMatch;
+            delete draft.home.location;
+          }
           draft.home.address = address;
         });
         return json(response, { home: viewHome(state.home, user.id) });

@@ -54,3 +54,19 @@ test('object downloads reject oversized payloads; paths cannot target another en
   await assert.rejects(repo.readObject(record),error=>error.status===413);
   assert.throws(()=>repo.readObject({...record,storagePath:'../../auth/v1/user'}),error=>error.status===404);
 });
+
+test('home location writes use the authenticated RPC and map invalid-location errors', async () => {
+  const location = { id: 'area:1', label: '서울 종로구', region: '서울특별시', lat: 37.57, lon: 126.98, newsQuery: '서울 종로구' };
+  let reject = null;
+  const repo = createSupabaseRepository({ url, key, fetchImpl: async (target, options) => {
+    assert.equal(target, url + '/rest/v1/rpc/still_update_home_location');
+    assert.equal(options.headers.Authorization, 'Bearer jwt-owner');
+    assert.deepEqual(JSON.parse(options.body), { p_location: location, p_expected_address: 'owner-only address' });
+    return reject ? Response.json({ message: reject }, { status: 400 }) : Response.json({ location });
+  } }).forUser('jwt-owner');
+  assert.deepEqual(await repo.updateHomeLocation(location, 'owner-only address'), { location });
+  reject = 'STILL_BAD_LOCATION';
+  await assert.rejects(repo.updateHomeLocation(location, 'owner-only address'), error => error.status === 400 && error.code === 'BAD_LOCATION');
+  reject = 'STILL_HOME_CHANGED';
+  await assert.rejects(repo.updateHomeLocation(location, 'owner-only address'), error => error.status === 409 && error.code === 'HOME_CHANGED');
+});

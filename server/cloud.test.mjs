@@ -94,8 +94,9 @@ function fakeCloud() {
       deleteRecord: async id => { const record = records.get(id); if (record && record.authorId !== user.id) throw fail(403, '작성자만 삭제할 수 있습니다.'); if (record) { record.status = 'deleted'; return { ...record }; } records.set(id, { id, status: 'deleted', authorId: user.id, familyId: family().id }); return null; },
       removeObject: async record => { objects.delete(record.id); },
       setTranscript: async (id, text, options = {}) => { const record = records.get(id); if (!visible(record) || record.status !== 'ready') throw fail(404, '기록을 찾을 수 없습니다.'); if (!options.automatic || record.transcriptStatus === 'processing') { record.transcript = text; record.transcriptStatus = text ? 'ready' : 'failed'; } return { ...record }; },
-      getHome: async () => ({ canEdit: family().ownerId === user.id, address: family().ownerId === user.id ? 'owner only' : undefined, status: '우리 집 상태 미확인' }),
+      getHome: async () => ({ canEdit: family().ownerId === user.id, address: family().ownerId === user.id ? 'owner only' : undefined, location: family().location || null, status: '우리 집 상태 미확인' }),
       updateHome: async () => { if (family().ownerId !== user.id) throw fail(403, '주소 등록자만 수정할 수 있습니다.'); return { address: 'updated' }; },
+      updateHomeLocation: async location => { if (family().ownerId !== user.id) throw fail(403, '지역 등록자만 수정할 수 있습니다.'); family().location = location; return { canEdit: true, location }; },
     };
   } };
   const mediaImpl = {
@@ -107,7 +108,7 @@ function fakeCloud() {
     },
     renderIndividualAudio: async () => ({ data: Buffer.from('voice'), extension: 'm4a', contentType: 'audio/mp4' }),
   };
-  const open = async (overrides = {}) => createCloudApp({ config: { ...config, ...overrides }, repository, fetchImpl, mediaImpl });
+  const open = async (overrides = {}, services = {}) => createCloudApp({ config: { ...config, ...overrides }, repository, fetchImpl, mediaImpl, ...services });
   return { users, families, records, objects, open, setPutGate: value => { putGate = value; }, setExportGate: value => { exportGate = value; },
     setAuthUnavailable: value => { authUnavailable = value; } };
 }
@@ -152,6 +153,49 @@ test('two independently configured gateways share records only after login and f
   assert.equal((await bob.request(`/api/records/${id}/media`)).status, 404);
   assert.equal((await upload(alice, id)).status, 410);
   assert.equal(cloud.objects.has(id), false);
+});
+
+test('cloud location lookup, canonical save and news respect membership and owner boundaries', async () => {
+  const cloud = fakeCloud();
+  const location = { id: '1835848', label: 'Seoul, South Korea', region: 'Seoul', lat: 37.57, lon: 126.98, newsQuery: 'Seoul' };
+  let calls = 0;
+  let unavailable = false;
+  const placeNews = {
+    searchPlaces: async query => { calls++; assert.equal(query, '서울'); return [location]; },
+    resolveLocation: async input => { calls++; assert.equal(input.id, location.id); return location; },
+    getNews: async input => {
+      calls++; assert.deepEqual(input, location);
+      if (unavailable) throw fail(503, '소식을 불러오지 못했습니다.', 'NEWS_UNAVAILABLE');
+      return { articles: [{ title: 'Regional headline', source: 'example.test', url: 'https://example.test/news', observedAt: '2026-11-14T00:00:00.000Z' }], query: 'Seoul', stale: false };
+    },
+  };
+  const one = await cloud.open({}, { placeNews });
+  const two = await cloud.open({}, { placeNews });
+  const owner = browser(one), member = browser(two), outsider = browser(two);
+  assert.equal((await owner.request('/api/home/news')).status, 401);
+  await login(owner, 'alice'); await login(member, 'bob'); await login(outsider, 'eve');
+  const created = await owner.request('/api/family', { method: 'POST', json: { name: '가족' } });
+  const code = (await created.json()).family.inviteCode;
+  assert.equal((await member.request('/api/home/news')).status, 403);
+  await member.request('/api/invite/accept', { method: 'POST', json: { code } });
+  await outsider.request('/api/family', { method: 'POST', json: { name: '별도 공간' } });
+  assert.equal((await owner.request('/api/home/news')).status, 409);
+  assert.equal((await member.request('/api/home/search', { method: 'POST', json: { query: '서울' } })).status, 403);
+  assert.equal((await member.request('/api/home/location', { method: 'PUT', json: { location } })).status, 403);
+  assert.equal(calls, 0);
+  assert.deepEqual((await (await owner.request('/api/home/search', { method: 'POST', json: { query: '서울' } })).json()).places, [location]);
+  const saved = await owner.request('/api/home/location', { method: 'PUT', json: { location: { ...location, newsQuery: 'private address override' } } });
+  assert.deepEqual((await saved.json()).home.location, location);
+  const shared = (await (await member.request('/api/home')).json()).home;
+  assert.equal(shared.address, undefined);
+  assert.deepEqual(shared.location, location);
+  assert.equal((await (await member.request('/api/home/news')).json()).news.articles.length, 1);
+  assert.equal((await outsider.request('/api/home/news')).status, 409);
+  unavailable = true;
+  const failed = await member.request('/api/home/news');
+  assert.equal(failed.status, 503, 'provider failure is not disguised as no matching articles');
+  const page = await dispatch(one, '/');
+  assert.match(page.headers.get('content-security-policy'), /frame-src https:\/\/www\.openstreetmap\.org/);
 });
 
 test('deletion during a delayed upload does not create a visible record', async () => {

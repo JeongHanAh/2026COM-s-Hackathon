@@ -86,7 +86,7 @@ test('family invitation, residence privacy, session isolation and restart', asyn
     assert.equal((await writeHome.json()).home.address, '테스트 주소');
     const hidden = (await (await member.request('/api/home')).json()).home;
     assert.equal('address' in hidden, false);
-    assert.equal(hidden.status, '동네 피해 관측 · 우리 집 상태 미확인');
+    assert.equal(hidden.status, '우리 집 상태 미확인');
     assert.equal((await member.request('/api/home', { method: 'PUT', json: { address: '테스트' } })).status, 403);
     assert.equal((await owner.request('/api/logout', { method: 'POST' })).status, 204);
     assert.equal((await owner.request('/api/records')).status, 401);
@@ -96,6 +96,52 @@ test('family invitation, residence privacy, session isolation and restart', asyn
     const reopened = browser(app);
     assert.equal((await reopened.login('a')).status, 200);
     assert.equal((await (await reopened.request('/api/home')).json()).home.address, '테스트 주소');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('registered regional news is shared without the private address and survives restart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'our-days-home-'));
+  const location = { id: '1835848', label: 'Seoul, South Korea', region: 'Seoul', lat: 37.57, lon: 126.98, newsQuery: 'Seoul' };
+  let lookups = 0;
+  const placeNews = {
+    searchPlaces: async query => { assert.equal(query, '서울'); lookups++; return [location]; },
+    resolveLocation: async input => { assert.equal(input.id, location.id); return location; },
+    getNews: async input => {
+      assert.deepEqual(input, location, 'only coarse location goes to the external provider');
+      return { articles: [], fetchedAt: '2026-11-14T00:00:00.000Z', query: location.newsQuery, stale: false };
+    },
+  };
+  try {
+    let app = await start(dir, { placeNews });
+    let owner = browser(app);
+    let member = browser(app);
+    assert.equal((await owner.request('/api/home/news')).status, 401);
+    await owner.login('a'); await member.login('b');
+    assert.equal((await member.request('/api/home/news')).status, 409);
+    assert.equal((await member.request('/api/home/search', { method: 'POST', json: { query: '서울' } })).status, 403);
+    assert.equal((await member.request('/api/home/location', { method: 'PUT', json: { location } })).status, 403);
+    assert.equal(lookups, 0, 'unauthorized lookups never reach the external service');
+    await owner.request('/api/home', { method: 'PUT', json: { address: '나만 보는 상세 주소 101호' } });
+    const found = await owner.request('/api/home/search', { method: 'POST', json: { query: '서울' } });
+    assert.deepEqual((await found.json()).places, [location]);
+    const stored = await owner.request('/api/home/location', { method: 'PUT', json: { location: { ...location, newsQuery: 'forged detailed address' } } });
+    assert.deepEqual((await stored.json()).home.location, location, 'server uses the canonical candidate');
+    assert.deepEqual((await (await member.request('/api/home/news')).json()).news.articles, []);
+    const visible = (await (await member.request('/api/home')).json()).home;
+    assert.equal(visible.address, undefined);
+    assert.equal(visible.status, '우리 집 상태 미확인');
+    assert.deepEqual(visible.location, location);
+    app = await start(dir, { placeNews });
+    owner = browser(app); member = browser(app);
+    await owner.login('a'); await member.login('b');
+    assert.deepEqual((await (await owner.request('/api/home')).json()).home.location, location);
+    await owner.request('/api/home', { method: 'PUT', json: { address: '나만 보는 상세 주소 101호' } });
+    assert.equal((await member.request('/api/home/news')).status, 200, 'saving the same address preserves the selected area');
+    await owner.request('/api/home', { method: 'PUT', json: { address: '새 집 상세 주소' } });
+    assert.equal((await (await member.request('/api/home')).json()).home.location, null);
+    assert.equal((await member.request('/api/home/news')).status, 409, 'changed home never shows the previous region as current');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

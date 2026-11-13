@@ -20,6 +20,8 @@ const errors = {
   STILL_DELETE_FORBIDDEN: [403, '기록을 남긴 사람만 삭제할 수 있습니다.', 'RECORD_DELETE_FORBIDDEN'],
   STILL_BAD_TRANSCRIPT: [400, '녹음 내용을 1~5,000자로 입력해 주세요.'],
   STILL_BAD_ADDRESS: [400, '주소를 300자 이내로 입력해 주세요.'],
+  STILL_BAD_LOCATION: [400, '선택한 지역 정보가 올바르지 않아요.', 'BAD_LOCATION'],
+  STILL_HOME_CHANGED: [409, '주소가 바뀌었어요. 새 주소의 지역을 다시 선택해 주세요.', 'HOME_CHANGED'],
 };
 
 function failure(code, status) {
@@ -114,6 +116,7 @@ export function createSupabaseRepository({ url, key, fetchImpl = fetch }) {
         setTranscript: (id, text, { automatic = false } = {}) => rpc('set_transcript', { p_id: id, p_text: text, p_automatic: automatic }),
         getHome: () => rpc('get_home'),
         updateHome: address => rpc('update_home', { p_address: address }),
+        updateHomeLocation: (location, expectedAddress) => rpc('update_home_location', { p_location: location, p_expected_address: expectedAddress }),
         async putObject(record, bytes) {
           if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > maxFileBytes || bytes.length !== record.sizeBytes) throw failure('STILL_BAD_RECORD');
           try {

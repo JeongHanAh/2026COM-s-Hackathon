@@ -250,5 +250,5 @@ export function securityHeaders(response) {
   response.setHeader('Referrer-Policy','no-referrer');
   response.setHeader('X-Frame-Options','DENY');
   response.setHeader('Permissions-Policy','camera=(self), microphone=(self), geolocation=()');
-  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 }

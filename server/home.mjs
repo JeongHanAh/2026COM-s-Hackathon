@@ -18,13 +18,14 @@ export function viewHome(home, userId) {
     : null;
 
   return {
-    neighborhood: home.neighborhood,
+    neighborhood: home.location?.region || '',
+    location: home.location || null,
     canEdit,
     hasAddress,
     ...(canEdit ? { address: home.address } : {}),
     status: buildingObservation
       ? `건물 피해 관측 · ${buildingObservation.result}`
-      : hasAddress ? '동네 피해 관측 · 우리 집 상태 미확인' : '거주지 등록 대기',
+      : hasAddress || home.location ? '우리 집 상태 미확인' : '거주지 등록 대기',
     buildingObservation,
   };
 }

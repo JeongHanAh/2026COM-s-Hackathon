@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import * as media from './media.mjs';
 import { createCloudAuth } from './cloud-auth.mjs';
 import { createSupabaseRepository } from './supabase.mjs';
+import { createPlaceNewsService } from './place-news.mjs';
 import { HttpError, json, noContent, readJson, readBody, checkOrigin, sendFile, sendExport,
   reportError, readRecordHeaders, validSignature, readExportQuery, checkRecordOwner,
   handleStatic, securityHeaders } from './http.mjs';
@@ -55,7 +56,7 @@ async function removeScratch(directory, prefix) {
   await rm(target, { recursive: true, force: true });
 }
 
-export async function createCloudApp({ config, tls, repository, fetchImpl = fetch, mediaImpl = media, now = Date.now } = {}) {
+export async function createCloudApp({ config, tls, repository, fetchImpl = fetch, mediaImpl = media, now = Date.now, placeNews = createPlaceNewsService() } = {}) {
   if (!config?.supabaseUrl || !config?.supabaseKey) throw new Error('Supabase configuration is required.');
   const source = repository || createSupabaseRepository({ url: config.supabaseUrl, key: config.supabaseKey, fetchImpl });
   const auth = createCloudAuth({ url: config.supabaseUrl, key: config.supabaseKey, secret: config.sessionSecret,
@@ -296,6 +297,28 @@ export async function createCloudApp({ config, tls, repository, fetchImpl = fetc
       }
     }
     if (pathname === '/api/export' && method === 'GET') return exportRecords(request, response, repo, login, readExportQuery(searchParams));
+    if (pathname === '/api/home/search' && method === 'POST') {
+      const home = await repo.getHome();
+      if (!home?.canEdit) throw new HttpError(403, '지역을 등록한 사람만 검색할 수 있습니다.');
+      guard('home:' + login.user.id, 20);
+      const { query } = await readJson(request);
+      return json(response, { places: await placeNews.searchPlaces(query) });
+    }
+    if (pathname === '/api/home/location' && method === 'PUT') {
+      const home = await repo.getHome();
+      if (!home?.canEdit) throw new HttpError(403, '지역을 등록한 사람만 수정할 수 있습니다.');
+      guard('home:' + login.user.id, 20);
+      const { location } = await readJson(request);
+      return json(response, { home: await repo.updateHomeLocation(await placeNews.resolveLocation(location), home.address) });
+    }
+    if (pathname === '/api/home/news' && method === 'GET') {
+      guard('home:' + login.user.id, 20);
+      const home = await repo.getHome();
+      if (!home?.location) throw new HttpError(409, '먼저 지역을 등록해 주세요.', 'HOME_LOCATION_REQUIRED');
+      const news = await placeNews.getNews(home.location);
+      if ((await repo.getHome())?.location?.id !== home.location.id) throw new HttpError(409, '지역이 변경됐어요. 다시 불러와 주세요.', 'HOME_CHANGED');
+      return json(response, { news });
+    }
     if (pathname === '/api/home') {
       if (method === 'GET') return json(response, { home: await repo.getHome() });
       if (method === 'PUT') {

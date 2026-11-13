@@ -58,7 +58,7 @@ async function api(path, options = {}) {
   try {
     response = await fetch(path, {
       cache: 'no-store', credentials: 'same-origin',
-      signal: AbortSignal.timeout(path === '/api/records' && request.method === 'POST' ? 45000 : 12000),
+      signal: AbortSignal.timeout(/^\/api\/home\/(search|location|news)$/.test(path) ? 60000 : path === '/api/records' && request.method === 'POST' ? 45000 : 12000),
       ...request,
       ...(json !== undefined ? { body: JSON.stringify(json), headers: { 'Content-Type': 'application/json', ...request.headers } } : {})
     });
