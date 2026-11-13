@@ -166,6 +166,7 @@ function onboarding() {
 function captureCard(kind) {
   const video = kind === 'video';
   return `<button class="capture-card easter-button ${video ? 'capture-video' : 'capture-audio'}" data-action="capture" data-value="${kind}" aria-label="${video ? '영상 기록' : '음성 기록'}">
+    <span class="capture-icon">${icon(video ? 'video' : 'mic', 24)}</span>
     <span class="capture-label">${commandLabel(video ? '영상 기록' : '음성 기록', `박현준 ${video ? '영상' : '음성'} 남겨줘`)}</span>
   </button>`;
 }

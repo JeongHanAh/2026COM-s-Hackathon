@@ -1,4 +1,4 @@
-const CACHE = 'our-days-shell-v13';
+const CACHE = 'our-days-shell-v14';
 const SHELL = [
   '/', '/styles.css', '/app.js', '/device.js', '/record-sync.js', '/icons.js', '/home.js', '/home.css', '/icon.svg', '/manifest.webmanifest',
   '/unosat-al-shati-2025-07-08.webp', '/unosat-al-shati-2025-10-11.webp'
